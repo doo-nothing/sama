@@ -1,5 +1,7 @@
 # sama
 
+[![build](https://github.com/doo-nothing/sama/actions/workflows/build.yml/badge.svg)](https://github.com/doo-nothing/sama/actions/workflows/build.yml)
+
 **An instrument of light and repetition — a drone synth for the original OP-1.**
 
 One oscillator into one shared delay. The delay's filter, its loss and its feedback age the
