@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../../../opus-kit/plugin-kit/sdk/opus_plugin.h"
-#include "../../../opus-kit/plugin-kit/sdk/op1fw.h"
+#include "opus_plugin.h"
+#include "op1fw.h"
 
 static FILE *dl;
 static const struct opus_engine *ENG;
