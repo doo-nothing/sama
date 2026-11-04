@@ -19,21 +19,21 @@ The voices render at 88.2 kHz, 128 samples each; the loop runs once per block at
 the summed voices, which is Strega's topology (one delay after the mix) and the only affordable
 one on a Blackfoot-class CPU.
 
-## Why four faces
+## Why faces
 
 Encoder turns reach a plugin engine **only on its own T1 page** on this firmware: a
-plugin-owned `page_t2` / `page_t4` draws, but its encoders are never delivered. Every shipped
-engine (including Opus's own `dx`) therefore keeps T2 and T4 as the OS pages and takes turns
-with a modifier.
+plugin-owned `page_t2` / `page_t4` draws, but its encoders are never delivered — so an engine
+that takes those pages gives you controls that cannot be turned.
 
-sama does the same thing differently: the four T1 encoders are the OS's own, so they always
-work, and a **face** decides what they mean. Each face keeps its own four values; T3 turns the
-face, T2 and T4 jump to the kindle and whirl pages. That gives sixteen parameters from four
-encoders without a single turn being taken from the OS.
+sama therefore leaves **T2 and T4 to the system** (envelope, LFO) and puts everything on T1:
+the four encoders are the OS's own, so they always work, and a **face** decides what they
+mean. T3 and T4 page through five faces (niche, space, cross, mod, core) while the screen
+stays on T1. Each face keeps its own four values: twenty parameters, four encoders, no turn
+taken from the OS, and the system LFO still modulates the four T1 knobs.
 
 ## The DSP blocks
 
-**Voice.** A triangle core at the phase step given by the core (`pitch[n]`, which already
+**Voice.** A selectable core (triangle, sine, saw, pulse) at the phase step given by the core (`pitch[n]`, which already
 carries glide, bend and tuning), crossfaded to a saw, then a **sine wavefolder**: a 256-point
 table read with linear interpolation, blended dry→folded so low drive bends and high drive
 folds. Up to 8 folds. Integer only, output always inside ±32767.

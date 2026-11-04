@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.0
+
+- **T2 and T4 are the system's pages again.** Our pages live on T1, paged with T3/T4; the
+  system LFO keeps modulating the T1 knobs.
+- five faces: niche, space, cross, mod, **core**.
+- **core page**: the oscillator selectable between triangle, dirty sine, saw and pulse, with
+  shape, fuzz and grit.
+- **mod page**: an internal modulator with rate, shape (tri/ramp/square/S&H), depth and a
+  destination (filter, time, pitch, cross).
+- **blend** replaces the fixed dry/wet.
+- the private envelope is gone: the OS owns the amplitude, so the system envelope page works;
+  the drone comes from the loop.
+- **regression suite** (`test/regression.py`) runs in CI: twenty controls, the loop's decay
+  and sustain, tuning, and the four cores.
+- fixed: fold was dead (k99 fed into a Q15 formula), shape did nothing outside the pulse core,
+  grit was a constant offset the DC blocker removed.
+
 ## 0.6.0
 
 - fourth face **cross**: `cross` (depth), `polar` (duck/lift), `drive` (loop saturation),

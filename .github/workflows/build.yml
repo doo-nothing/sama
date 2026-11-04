@@ -51,9 +51,13 @@ jobs:
           mkdir -p build
           cp "$KIT/plugin-kit/build/sama.opmod" build/
 
-      - name: Host harness and art
+      - name: Regression suite
         run: |
           python3 -m pip install --quiet pillow
+          OPUS_KIT="$KIT/plugin-kit/sdk" python3 test/regression.py
+
+      - name: Host harness and art
+        run: |
           cd test
           cc -O2 -w -I"$KIT/plugin-kit/sdk" -o host host.c -lm
           ./host /tmp/check.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40

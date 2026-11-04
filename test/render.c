@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "opus_plugin.h"
-#include "op1fw.h"
+#include "../../../opus-kit/plugin-kit/sdk/opus_plugin.h"
+#include "../../../opus-kit/plugin-kit/sdk/op1fw.h"
 
 static FILE *dl;
 static const struct opus_engine *ENG;
@@ -85,10 +85,6 @@ int main(int argc, char **argv)
         fprintf(dl, "PAGE %d\n", f);
         page_t1();
     }
-    fprintf(dl, "PAGE kindle\n");
-    page_t2();
-    fprintf(dl, "PAGE whirl\n");
-    page_t4();
     fclose(dl);
     return 0;
 }
