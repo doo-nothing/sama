@@ -1,0 +1,64 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the Blackfin toolchain
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/bfin-build
+          key: bfin-gcc13.3-binutils2.38-linux
+
+      - name: Fetch the Opus 2 plugin kit
+        run: git clone --depth 1 https://github.com/LizardMan245/opus.git /opt/opus
+
+      - name: Build the toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cd /opt/opus/plugin-kit
+          bash tools/toolchain/build-bfin-toolchain.sh fetch verify extract linux
+
+      - name: Install pyelftools
+        run: python3 -m pip install --quiet pyelftools
+
+      - name: Build sama.opmod
+        run: |
+          export PATH=$HOME/bfin-build/linux-install/bin:$PATH
+          export OP1_BFIN_TOOLCHAIN=$HOME/bfin-build/linux-install
+          python3 /opt/opus/plugin-kit/plugin_tool.py build "$GITHUB_WORKSPACE"
+          python3 /opt/opus/plugin-kit/plugin_tool.py show /opt/opus/plugin-kit/build/sama.opmod
+          mkdir -p "$GITHUB_WORKSPACE/build"
+          cp /opt/opus/plugin-kit/build/sama.opmod "$GITHUB_WORKSPACE/build/"
+
+      - name: Build the host test harness
+        run: |
+          cd test
+          cc -O2 -w -I/opt/opus/plugin-kit/sdk -o host host.c -lm
+          ./host /tmp/check.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40
+          cc -O2 -w -I/opt/opus/plugin-kit/sdk -o render render.c -lm
+          ./render /tmp/art.txt
+          python3 render.py /tmp/art.txt /tmp/art
+          ls -l /tmp/art
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sama-opmod
+          path: build/sama.opmod
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/sama.opmod

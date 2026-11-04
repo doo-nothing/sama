@@ -1,0 +1,13 @@
+# jake.sama: a drone instrument of light and repetition, after Make Noise's Strega.
+opmod     1
+id        jake.sama
+name      Sama
+author    doo-nothing
+version   0.6.0
+core      2.8
+adds      engine sama
+uses      t3 synth modal "next face: niche, space"
+uses      blue_push synth modal "next face"
+uses      green_push synth modal "next face"
+uses      white_push synth modal "next face"
+uses      orange_push synth modal "next face"

@@ -1,0 +1,7 @@
+build/
+*.opmod
+test/host
+test/render
+*.wav
+*.raw
+.DS_Store

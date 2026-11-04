@@ -1,0 +1,2 @@
+cycles 200000
+measured 2026-11-04 conservative claim before the first device run
