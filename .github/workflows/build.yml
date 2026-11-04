@@ -50,6 +50,7 @@ jobs:
 
       - name: Host harness and art
         run: |
+          python3 -m pip install --quiet pillow
           cd test
           cc -O2 -w -I"$KIT/plugin-kit/sdk" -o host host.c -lm
           ./host /tmp/check.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40

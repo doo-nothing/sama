@@ -104,9 +104,6 @@ int main(int argc, char **argv)
         fv[F_KINDLE][i] = (short)(a[8 + i] * 32767 / 99);
         fv[F_CROSS][i]  = (short)(a[12 + i] * 32767 / 99);
     }
-    fprintf(stderr, "args %d %d %d %d | fv0 %d %d %d %d | face %d | TT %d %d %d\n",
-            a[0], a[1], a[2], a[3], fv[0][0], fv[0][1], fv[0][2], fv[0][3], face,
-            TIMETAB[0], TIMETAB[30], TIMETAB[48]);
     for (int v = 0; v < 6; ++v) ENG->init(&VO[v], v);
 
     int frames = 44100 * 8;
@@ -122,10 +119,6 @@ int main(int argc, char **argv)
             for (int v = 0; v < 6; ++v) if (ENG->release) ENG->release(&VO[v], NULL);
             held = 2;
         }
-        { static int last = -1; int sec = i / 44100;
-          if (sec != last) { last = sec;
-            fprintf(stderr, "t=%d R_hold=%u stage=%u env=%d hold=%u R_att=%d R_rel=%d\n",
-                    sec, R_hold, VO[0].stage, VO[0].env, VO[0].hold, R_att, R_rel); } }
         block_out(buf + i, 64, w);
     }
     fclose(w);
