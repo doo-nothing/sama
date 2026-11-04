@@ -100,7 +100,7 @@ host, so the DSP can be swept and measured without the device:
 
 ```sh
 cd test
-cc -O2 -I/opt/opus/plugin-kit/sdk -o host host.c -lm
+cc -O2 -I"$KIT/plugin-kit/sdk" -o host host.c -lm
 ./host /tmp/out.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40
 ```
 

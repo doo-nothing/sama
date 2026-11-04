@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      KIT: ${{ github.workspace }}/.kit
+      TOOLCHAIN: ${{ github.workspace }}/.toolchain
     steps:
       - uses: actions/checkout@v4
 
@@ -17,36 +20,40 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          path: ~/bfin-build
-          key: bfin-gcc13.3-binutils2.38-linux
+          path: .toolchain
+          key: bfin-gcc13.3-binutils2.38-linux-v1
 
       - name: Fetch the Opus 2 plugin kit
-        run: git clone --depth 1 https://github.com/LizardMan245/opus.git /opt/opus
+        run: git clone --depth 1 https://github.com/LizardMan245/opus.git "$KIT"
 
       - name: Build the toolchain
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          cd /opt/opus/plugin-kit
-          bash tools/toolchain/build-bfin-toolchain.sh fetch verify extract linux
+          sudo env WORK="$TOOLCHAIN" bash "$KIT/plugin-kit/tools/toolchain/build-bfin-toolchain.sh" \
+            fetch verify extract linux
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN"
 
-      - name: Install pyelftools
-        run: python3 -m pip install --quiet pyelftools
+      - name: Check the toolchain
+        run: |
+          export PATH="$TOOLCHAIN/linux-install/bin:$PATH"
+          bfin-elf-gcc --version | head -1
 
       - name: Build sama.opmod
         run: |
-          export PATH=$HOME/bfin-build/linux-install/bin:$PATH
-          export OP1_BFIN_TOOLCHAIN=$HOME/bfin-build/linux-install
-          python3 /opt/opus/plugin-kit/plugin_tool.py build "$GITHUB_WORKSPACE"
-          python3 /opt/opus/plugin-kit/plugin_tool.py show /opt/opus/plugin-kit/build/sama.opmod
-          mkdir -p "$GITHUB_WORKSPACE/build"
-          cp /opt/opus/plugin-kit/build/sama.opmod "$GITHUB_WORKSPACE/build/"
+          export PATH="$TOOLCHAIN/linux-install/bin:$PATH"
+          export OP1_BFIN_TOOLCHAIN="$TOOLCHAIN/linux-install"
+          python3 -m pip install --quiet pyelftools
+          python3 "$KIT/plugin-kit/plugin_tool.py" build "$GITHUB_WORKSPACE"
+          python3 "$KIT/plugin-kit/plugin_tool.py" show "$KIT/plugin-kit/build/sama.opmod"
+          mkdir -p build
+          cp "$KIT/plugin-kit/build/sama.opmod" build/
 
-      - name: Build the host test harness
+      - name: Host harness and art
         run: |
           cd test
-          cc -O2 -w -I/opt/opus/plugin-kit/sdk -o host host.c -lm
+          cc -O2 -w -I"$KIT/plugin-kit/sdk" -o host host.c -lm
           ./host /tmp/check.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40
-          cc -O2 -w -I/opt/opus/plugin-kit/sdk -o render render.c -lm
+          cc -O2 -w -I"$KIT/plugin-kit/sdk" -o render render.c -lm
           ./render /tmp/art.txt
           python3 render.py /tmp/art.txt /tmp/art
           ls -l /tmp/art
