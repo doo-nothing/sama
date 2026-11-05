@@ -34,7 +34,9 @@ a lamp. It is not affiliated with or endorsed by Make Noise; it is a homage.
 - **One oscillator, one delay.** Every voice shares the delay line — polyphony is a choir in
   one room, not six rooms.
 - **The loop is the instrument.** Filter, absorb, feedback, drive and the loop's own highpass
-  all sit *inside* the regeneration path.
+  all sit *inside* the regeneration path. Drive lowers the saturation knee instead of adding
+  gain — a saturator that adds gain inside a feedback loop just self-oscillates and pins the
+  whole instrument at full scale.
 - **The sub-harmonic is a modulator, not a voice.** It bends the delay time (warp) and the
   oscillator's pitch, the way patching the sub-oscillator to Tonic does on the hardware.
 - **The loop feeds back into the source.** Its level ducks or lifts the oscillator (cross),
@@ -51,9 +53,9 @@ Each face keeps its own four values, so twenty parameters live behind four encod
 
 | knob | niche | space | cross | mod | core |
 |---|---|---|---|---|---|
-| blue | **fold** — the sine folder | **absorb** — the loop's lowpass, 18 kHz→300 Hz | **cross** — how far the loop moves the source | **rate** — 0.02–40 Hz | **core** — triangle → dirty sine → saw → pulse |
+| blue | **fold** — the sine folder | **absorb** — the loop's lowpass, 12 kHz→150 Hz | **cross** — how far the loop moves the source | **rate** — 0.02–40 Hz | **core** — triangle → dirty sine → saw → pulse |
 | green | **time** — 20 ms–1.2 s | **warp** — sub → delay time | **polar** — below 50 ducks, above 50 lifts | **shape** — tri / ramp / square / S&H | **shape** — asymmetry, pulse width |
-| white | **decay** — the loop's gain | **drift** — loop → pitch | **drive** — loop saturation, 1–3× | **depth** | **fuzz** — saturation |
+| white | **decay** — the loop's gain | **drift** — loop → pitch | **drive** — the loop's soft knee, a colour not a gain | **depth** | **fuzz** — saturation |
 | orange | **filter** — 60 Hz–9 kHz | **blend** — dry/wet | **tone** — the loop's highpass, 80 Hz–1.2 kHz | **dest** — filter / time / pitch / cross | **grit** — noise |
 
 ## Install

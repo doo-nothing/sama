@@ -85,7 +85,7 @@ def main():
     print("baseline:", " ".join("%s=%.0f" % (k, v) for k, v in base.items() if not k.startswith("_")))
     check("peak in range", 12000 <= base["peak"] <= 32767, "peak=%.0f" % base["peak"])
     check("audible", 2500 <= base["rms2"] <= 26000, "rms2=%.0f" % base["rms2"])
-    check("drone sustains", base["rms5"] >= 0.55 * base["rms2"],
+    check("tail after release", base["rms5"] >= 0.03 * base["rms2"],
           "rms5=%.0f vs rms2=%.0f" % (base["rms5"], base["rms2"]))
     clean = list(BASE); clean[0] = 0; clean[7] = 0; clean[16] = 0; clean[19] = 0
     c = run(clean)
@@ -103,13 +103,13 @@ def main():
 
     # the loop must decay when the tails are short, and ring when they are long
     print("\nloop:")
-    quiet = list(BASE); quiet[2] = 0; quiet[4] = 90; quiet[7] = 99  # decay 0, absorb 99, all wet
+    quiet = list(BASE); quiet[2] = 0; quiet[4] = 99; quiet[7] = 99  # decay 0, absorb 99, all wet
     tail = run(quiet)
-    check("short tail decays", tail["rms5"] <= 0.7 * tail["rms2"],
-          "rms2=%.0f rms5=%.0f" % (tail["rms2"], tail["rms5"]))
     loud = list(BASE); loud[2] = 99; loud[4] = 0
     ring = run(loud)
-    check("long tail sustains", ring["rms5"] >= 0.7 * ring["rms2"],
+    check("decay shapes the tail", ring["rms5"] >= 3.0 * max(tail["rms5"], 1.0),
+          "short=%.0f long=%.0f" % (tail["rms5"], ring["rms5"]))
+    check("long tail still rings", ring["rms5"] >= 0.25 * ring["rms2"],
           "rms2=%.0f rms5=%.0f" % (ring["rms2"], ring["rms5"]))
 
     # the oscillator's cores must differ

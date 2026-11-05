@@ -3,7 +3,7 @@ opmod     1
 id        jake.sama
 name      Sama
 author    doo-nothing
-version   0.7.0
+version   0.7.1
 core      2.8
 adds      engine sama
 uses      t3 synth modal "next face: niche, space"

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.1
+
+- **fixed: drive added loop gain.** It multiplied the feedback path, so the loop
+  self-oscillated at full scale and pinned the output — every knob felt weak because the
+  instrument was saturated. Drive is now a movable soft knee: it colours the loop without
+  changing its gain.
+- fixed: the sample-and-hold modulator never held (it only sampled in a 3000-wide window);
+  fixed: the cross destination's modulation stuck between blocks; fixed: the whirl orbit never
+  moved; fixed: a sign-compare warning that broke the device build.
+- absorb now runs 12 kHz→150 Hz on a squared curve, so a turn near the top is audible.
+- warp depth raised; grit raised; the mod page defaults deeper and faster.
+- regression suite extended: tail-after-release, decay shapes the tail, and a sensitivity pass.
+- the loop's resonance was lowered (Q≈0.8) so it rings rather than self-oscillates.
+
 ## 0.7.0
 
 - **T2 and T4 are the system's pages again.** Our pages live on T1, paged with T3/T4; the

@@ -29,28 +29,40 @@ static short *line;
 static unsigned widx;
 static int tlen, tbase, wlp, ic1, ic2, dcz, hlp, alp, e1, e2;
 static unsigned g_bph, g_subph, g_n = 0x1234u, g_seed = 22222u, g_sh;
+static int g_shlast = 65535;
 static volatile unsigned g_substep;
 static volatile int lock_blocks;
 
 static volatile int face = F_NICHE;
 static short fv[F_N][4] = {
-    { 18204, 20190, 30426, 17873 },   /* niche: fold 55, time 61 (249 ms), decay 92, filter 54 */
-    {  2646, 13239,  9929, 25559 },   /* space: absorb 8, warp 40, drift 30, blend 78 */
-    { 11587,  9929,  3310, 13239 },   /* cross: cross 35, polar 30, drive 10, tone 40 */
-    { 11915,  4966, 16549,  9929 },   /* mod:   rate 36 (0.32 Hz), shape 15, depth 50, dest 30 */
+    { 18204, 20190, 29457, 17873 },   /* niche: fold 55, time 61 (249 ms), decay 92, filter 54 */
+    {  6620, 13239,  9929, 23593 },   /* space: absorb 8, warp 40, drift 30, blend 78 */
+    { 11587,  9929,  4966, 13239 },   /* cross: cross 35, polar 30, drive 10, tone 40 */
+    { 14900,  7600, 19000,  9929 },   /* mod:   rate 36 (0.32 Hz), shape 15, depth 50, dest 30 */
     {  9929,  9929,     0,  3000 }    /* core:  triangle, shape 30, fuzz 0, grit 9 */
 };
 
 /* resolved once a block */
-static volatile int R_fold = 55, R_time = 61, R_decay = 92, R_filter = 54;
-static volatile int R_abs = 8, R_warp = 40, R_drift = 30, R_blend = 25559;
-static volatile int R_cross = 35, R_polar = 30, R_drive = 10, R_tone = 40;
-static volatile int R_rate = 36, R_shape = 15, R_depth = 50, R_dest = 30;
+static volatile int R_fold = 55, R_time = 61, R_decay = 88, R_filter = 54;
+static volatile int R_abs = 20, R_warp = 40, R_drift = 30, R_blend = 23593;
+static volatile int R_cross = 35, R_polar = 30, R_drive = 15, R_tone = 40;
+static volatile int R_rate = 45, R_shape = 15, R_depth = 60, R_dest = 30;
 static volatile int R_core = 30, R_cshape = 30, R_fuzz = 0, R_grit = 9;
 static volatile int g_breath = 16384, g_drift = 0, g_pitchmod = 0, g_xmod = 0;
 static volatile int R_gate = 32767;
 
 static int k99(short v) { return v < 0 ? 0 : (v * 99 + 16383) / 32767; }
+
+/* soft-knee with a movable knee: drive colours the loop without adding gain */
+static int softk(int x, int knee)
+{
+    if (knee < 6000) knee = 6000;
+    if (x > knee) x = knee + ((x - knee) >> 2);
+    if (x > 32767) x = 32767;
+    if (x < -knee) x = -knee + ((x + knee) >> 2);
+    if (x < -32768) x = -32768;
+    return x;
+}
 
 static int soft(int x)
 {
@@ -80,7 +92,6 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     int cshape = R_cshape;
     int fuzz = R_fuzz;
     int grit = R_grit;
-    int breath = g_breath;
     int drift = (g_drift * R_drift) / 300;
     int pm = g_pitchmod;
 
@@ -118,7 +129,7 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         if (fuzz) x = soft((x * drive) >> 15);
         if (grit) {                                           /* grit: a new random value a sample */
             g_seed = g_seed * 1103515245u + 12345u;
-            x += (((int)((g_seed >> 20) & 15) - 8) * grit * 2);
+            x += (((int)((g_seed >> 20) & 15) - 8) * grit * 4);
         }
         if (cshape != 50) {                                    /* asymmetric: shape the fold */
             x += (cshape - 50) * 120;
@@ -137,7 +148,6 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
 
         int y = (x * 26) >> 5;
         if (R_cross) y = (y * R_gate) >> 15;                  /* the loop ducks the source */
-        (void)breath;
         out[n] = (short)soft(y);
     }
 }
@@ -181,9 +191,8 @@ static void b_block(short *buf)
     int target = TIMETAB[R_time];
     int fi = R_filter;
     int dec = 15000 + R_decay * 180;
-    int abswc = ABSTAB[R_abs];
+    int abswc = ABSTAB[(R_abs * R_abs) / 99];
     int twc = TONETAB[R_tone];
-    int drv = 32768 + R_drive * 330;
     int wc = WLP[R_time];
 
     g_seed = g_seed * 1103515245u + 12345u;
@@ -198,11 +207,13 @@ static void b_block(short *buf)
         else if (R_shape < 50) raw = bh;                            /* rising ramp */
         else if (R_shape < 75) raw = (bh < 32768) ? 0 : 65535;      /* square */
         else {                                                      /* sample and hold */
-            if (bh < 3000 && g_sh == 0) g_sh = (g_seed >> 8) & 0xFFFF;
+            if (bh < g_shlast) g_sh = (g_seed >> 8) & 0xFFFF;
+            g_shlast = bh;
             raw = g_sh;
-            if (bh > 3000) g_sh = 0;
         }
         g_breath = raw;
+        g_pitchmod = 0;
+        g_xmod = 0;
         {
             int m = ((raw - 32767) * R_depth) / 99;                 /* signed, scaled */
             int d = R_dest;
@@ -228,14 +239,14 @@ static void b_block(short *buf)
         R_gate = g2;
     }
 
-    int g = GTAB[fi], kq = 3400;
+    int g = GTAB[fi], kq = 4700;
     int den = 4096 + ((g * (g + kq)) >> 12);
     int a1 = (4096 << 12) / den;
     int a2 = (g * a1) >> 12;
     int a3 = (g * a2) >> 12;
     if (a3 < 1 && g > 4) a3 = 1;
 
-    int wd = (R_warp * 28) / 99;
+    int wd = (R_warp * 40) / 99;
     unsigned subph = g_subph;
     unsigned substep = g_substep >> 1;
     int lasty = 0;
@@ -284,7 +295,7 @@ static void b_block(short *buf)
 
         {
             int w = src + ((y * dec) >> 15);
-            w = soft((w * drv) >> 15);
+            w = softk(w, 27000 - R_drive * 190);   /* drive = a lower knee, not more gain */
             wlp += ((w - wlp) * wc) >> 15;
             int ws = soft(wlp);
             if (R_time > 60) ws += (int)((g_seed >> 20) & 3) - 1;
@@ -294,7 +305,7 @@ static void b_block(short *buf)
 
         {
             int o = src + (((y - src) * R_blend) >> 15);
-            o = (o * 40) >> 5;
+            o = (o * 48) >> 5;
             buf[n] = (short)soft(o);
             lasty = y;
         }
@@ -467,6 +478,7 @@ static void draw_core(int core, int cshape, int fuzz, int grit)
 static void page_t1(void)
 {
     int f = face;
+    ++g_n;
     int v[4];
     for (int i = 0; i < 4; ++i) v[i] = k99(fv[f][i]);
 
@@ -507,7 +519,7 @@ static void page_t1(void)
     }
 
     opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v17");
+    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v18");
     footer(f, v);
 }
 
@@ -543,7 +555,7 @@ static int e_turn(int encoder, int detents, int page)
 static const struct opus_engine SAMA = {
     .size = sizeof(struct opus_engine),
     .name = "sama",
-    .knobs = { 18204, 20190, 30426, 17873, 0, 0, 0, 0 },
+    .knobs = { 18204, 20190, 29457, 17873, 0, 0, 0, 0 },
     .voice = sizeof(struct voice),
     .init = v_init,
     .render = v_render,
