@@ -45,6 +45,67 @@ a lamp. It is not affiliated with or endorsed by Make Noise; it is a homage.
   `shift + T1` freezes the room into a drone, `FN + T1` loads the next scene, and the macro face gives
   four performance gestures over the twenty deep controls.
 
+## The instrument, simply
+
+Think of sama as **one lamp in one room**.
+
+- The **lamp** is the oscillator. Each key lights its own lamp (one of six voices), but every
+  lamp shines into the *same* room.
+- The **room** is a delay that feeds back into itself. Its filter, tone, saturation and decay
+  do not just echo — they colour and age the sound, and the room slowly forgets.
+- **The room can touch the lamp.** Its audio can bend the lamp's pitch at audio rate
+  (`cross`), and its loudness can duck or lift the lamp and bend its pitch (`drift`). The room
+  is not an effect after the synth; it is part of the synth.
+- The **lamp's character** is the `core` face: triangle/sine/saw/pulse, the folder, bias,
+  growl and fuzz.
+- The **performance** is the `macro` face: four big gestures that move many of the deeper
+  controls at once.
+
+The signal path is one line:
+
+```
+keys → six voices → oscillator + folder → strike → cross gate → sum
+     → the room (delay, diffusion, filter, tone, drive, decay)
+     → blend with the dry voices → out
+```
+
+The room's output is also what comes back to the voices: it phase-modulates the oscillator,
+and its envelope moves the source's level and pitch.
+
+## The controls, simply
+
+There are **twenty deep controls and four macros** but only four knobs. A **face** is simply
+what the four knobs mean right now. The knobs are the OP-1's own T1 knobs, so the system LFO
+(T4) can still wobble them.
+
+**The page map**
+
+- **T1** is the page key; plain T1 does nothing (it is already selected).
+- **T3** pages to the previous face; **T4** is the system's LFO page; **T2** is the system's
+  envelope.
+- The four **encoder pushes** jump straight to niche / space / cross / core.
+- **FN + T1** loads the next scene; **shift + T1** freezes the room (the keys are muted while
+  it is held; press again to release).
+
+**The six faces, in plain words**
+
+| face | what it is for | the four knobs |
+|---|---|---|
+| **niche** | the instrument | fold (how folded), time (how long the room), decay (how long it rings), filter (how dark/bright the room is) |
+| **space** | how the room ages | tone (dark/bright tilt), warp (the note's sub wobbles the echo), drift (the room's loudness bends the pitch), blend (dry vs room) |
+| **cross** | the room against the lamp | cross (how much the room pushes the lamp), polar (duck/lift and feedback sign), drive (room saturation), res (filter resonance) |
+| **mod** | the automatic mover | rate, shape, depth, dest (filter / time / pitch / cross) |
+| **core** | the lamp itself | core (triangle → sine → saw → pulse), bias (asymmetry), growl (sub → phase FM), fuzz (saturation) |
+| **macro** | the performance layer | body (filter/decay/tone/res), pressure (fold/drive/fuzz), motion (LFO/drift/warp/wow), space (blend/diffusion/cross) |
+
+The **macro** face is for playing; the deep faces are for editing. The macros are offsets,
+neutral at 50: they do not overwrite the deep values, they lean on them.
+
+**The settings** (blue push on sama's row in the mods list) are the room's character:
+**scale** (the slow pitch mod's scale), **tune** (the room becomes a resonator tuned to the
+lowest note), **wow** (tape wobble), **keytrack** (the room filter follows the note),
+**diffuse** (the allpass smear).
+
 ## Pages and faces
 
 **T2 and T4 stay the system's pages** (envelope, LFO). Every sama control lives on **T1**, where
@@ -77,9 +138,19 @@ The blue push on sama's row in the mods list opens its settings page.
 
 ### Scenes
 
-`T1` cycles four starting points: **lamp** (clear, short room), **choir** (the default; wide and
-slow), **comb** (short, bright room), **storm** (high drive/fold; the room self-oscillates). A
-scene sets all twenty-four values; it is a starting point, not a lock.
+A scene is a **complete pose of the instrument**: all twenty-four values (six faces × four
+knobs). It is not an OP-1 preset; it is a starting point you can edit. **FN + T1** loads the
+next scene and shows its name.
+
+- **lamp** — clear and short; the note first.
+- **choir** — the default: wide, slow, long; six voices in a big room.
+- **comb** — short, bright, tight; the room is almost a resonator.
+- **storm** — high drive/fold; the room self-oscillates; wild. This is the one that can sound
+  like noise; it is meant to.
+
+A scene's values stay on the knobs. Save the sound in the OP-1's normal way and all
+twenty-four values travel with it; to keep a scene as a permanent preset, load it and save
+the sound.
 
 ## Install
 
