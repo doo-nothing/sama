@@ -53,14 +53,14 @@ jobs:
 
       - name: Regression suite
         run: |
-          python3 -m pip install --quiet pillow
+          python3 -m pip install --quiet pillow numpy
           OPUS_KIT="$KIT/plugin-kit/sdk" python3 test/regression.py
 
       - name: Host harness and art
         run: |
           cd test
           cc -O2 -w -I"$KIT/plugin-kit/sdk" -o host host.c -lm
-          ./host /tmp/check.wav 55 61 88 54 20 36 40 30 30 88 78 30 35 30 10 40
+          ./host /tmp/check.wav 45 70 92 50 35 25 35 70 35 40 25 45 30 15 45 30 35 50 35 5
           cc -O2 -w -I"$KIT/plugin-kit/sdk" -o render render.c -lm
           ./render /tmp/art.txt
           python3 render.py /tmp/art.txt /tmp/art

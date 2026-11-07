@@ -4,19 +4,19 @@
 
 **An instrument of light and repetition — a drone synth for the original OP-1.**
 
-One oscillator into one shared delay. The delay's filter, its loss and its feedback age the
-sound; the note's own sub-harmonic warps the delay time; the loop moves the pitch and the
-level of the source. Six voices sing into one room, and the room answers.
+One oscillator into one shared, tunable room. The room's filter, loss and feedback age the
+sound; the note's sub-harmonic warps the delay time; the loop moves the pitch and the level of
+the source; and the room's own audio bends the source's phase. Six voices sing into one room,
+and the room answers.
 
 Built for [Opus 2](https://github.com/LizardMan245/opus) on the original OP-1 (firmware #246,
 Blackfin BF524). Real-time, integer-only DSP. No samples, no libs, no floating point.
 
-![niche](art/niche.png)
-
 | | |
 |---|---|
-| ![space](art/space.png) | ![cross](art/cross.png) |
-| ![mod](art/mod.png) | ![core](art/core.png) |
+| ![niche](art/niche.png) | ![space](art/space.png) |
+| ![cross](art/cross.png) | ![mod](art/mod.png) |
+| ![core](art/core.png) | ![macro](art/macro.png) |
 
 *(Not mockups: these are rendered from the plugin's own drawing code by `test/render.c` and
 `test/render.py`, at the OP-1's true 320×160.)*
@@ -31,32 +31,55 @@ on the cutoff, and every path able to modulate every other. **sama** takes that 
 and inverts its temperament — where Strega is a witch working alchemy, sama is a niche holding
 a lamp. It is not affiliated with or endorsed by Make Noise; it is a homage.
 
-- **One oscillator, one delay.** Every voice shares the delay line — polyphony is a choir in
-  one room, not six rooms.
-- **The loop is the instrument.** Filter, absorb, feedback, drive and the loop's own highpass
-  all sit *inside* the regeneration path. Drive lowers the saturation knee instead of adding
-  gain — a saturator that adds gain inside a feedback loop just self-oscillates and pins the
-  whole instrument at full scale.
-- **The sub-harmonic is a modulator, not a voice.** It bends the delay time (warp) and the
-  oscillator's pitch, the way patching the sub-oscillator to Tonic does on the hardware.
-- **The loop feeds back into the source.** Its level ducks or lifts the oscillator (cross),
-  its envelope sags the pitch (drift) and colours the filter.
+- **One oscillator, one room.** Every voice shares the delay line — polyphony is a choir in one
+  room, not six rooms.
+- **The loop is the instrument.** Filter, tone, drive, resonance and the loop's own highpass all
+  sit *inside* the regeneration path. Drive lowers the saturation knee instead of adding gain.
+- **The room has a body.** With `tune` on, the time knob selects 1–16 periods of the lowest note
+  and the loop runs clean: the delay becomes a tuned comb, and high decay makes it sing at the
+  note instead of squealing at a random resonance.
+- **The loop feeds back into the source.** Its level ducks or lifts the oscillator (`cross`), its
+  envelope sags or lifts the pitch (`drift`), it colours the filter, and its audio bends the
+  oscillator's phase at audio rate (one block of latency).
+- **It is playable.** A note-on strike gives the room a transient, the filter tracks the root,
+  `shift + T1` freezes the room into a drone, `T1` loads the next scene, and the macro face gives
+  four performance gestures over the twenty deep controls.
 
 ## Pages and faces
 
-**T2 and T4 stay the system's pages** (envelope, LFO). Every sama control lives on **T1**,
-where encoder turns are actually delivered: the four knobs are the OS's own, and a *face*
-decides what they mean. **T3** pages to the previous face, **T4** to the next — the screen
-stays on T1, and the system LFO keeps modulating the four knobs.
+**T2 and T4 stay the system's pages** (envelope, LFO). Every sama control lives on **T1**, where
+encoder turns are actually delivered: the four knobs are the OS's own, and a *face* decides what
+they mean. **T3** pages to the previous face, **T4** to the next; the four encoder pushes jump to
+niche / space / cross / core. **T1** (without shift) loads the next scene; **shift + T1** freezes
+the room.
 
-Each face keeps its own four values, so twenty parameters live behind four encoders.
+Each face keeps its own four values, and all twenty-four values (six faces) travel with the
+sound in the engine's own data block, so a saved sound restores the whole instrument.
 
-| knob | niche | space | cross | mod | core |
-|---|---|---|---|---|---|
-| blue | **fold** — the sine folder | **absorb** — the loop's lowpass, 12 kHz→150 Hz | **cross** — how far the loop moves the source | **rate** — 0.02–40 Hz | **core** — triangle → dirty sine → saw → pulse |
-| green | **time** — 20 ms–1.2 s | **warp** — sub → delay time | **polar** — below 50 ducks, above 50 lifts | **shape** — tri / ramp / square / S&H | **shape** — asymmetry, pulse width |
-| white | **decay** — the loop's gain | **drift** — loop → pitch | **drive** — the loop's soft knee, a colour not a gain | **depth** | **fuzz** — saturation |
-| orange | **filter** — 60 Hz–9 kHz | **blend** — dry/wet | **tone** — the loop's highpass, 80 Hz–1.2 kHz | **dest** — filter / time / pitch / cross | **grit** — noise |
+| knob | niche | space | cross | mod | core | macro |
+|---|---|---|---|---|---|---|
+| blue | **fold** — the sine folder | **tone** — the loop's tilt | **cross** — the loop's coupling to the source | **rate** — 0.02–40 Hz | **core** — triangle → sine → saw → pulse | **body** — filter/decay/tone/res |
+| green | **time** — 20 ms–1.2 s; tuned: 1–16 periods | **warp** — sub → delay time | **polar** — duck/lift and feedback sign | **shape** — tri / ramp / square / S&H | **bias** — folder symmetry, pulse width | **pressure** — fold/drive/fuzz/bias |
+| white | **decay** — the loop's gain | **drift** — room envelope → voice pitch | **drive** — the loop's soft knee | **depth** | **growl** — sub → phase FM | **motion** — LFO/drift/warp/wow |
+| orange | **filter** — 60 Hz–9 kHz | **blend** — dry/wet | **res** — filter Q 0.5–8 | **dest** — filter / time / pitch / cross | **fuzz** — voice saturation | **space** — blend/diffusion/tone/cross |
+
+### Settings
+
+The blue push on sama's row in the mods list opens its settings page.
+
+| setting | choices | what |
+|---|---|---|
+| **scale** | chromatic, major, minor, pentatonic | the slow pitch mod is quantised to this scale (root = the lowest held note) |
+| **tune** | off, on | the time knob becomes 1–16 periods of the root; the loop runs clean and becomes a resonator |
+| **wow** | 0–99 | tape wow/flutter on the delay time |
+| **keytrack** | 0–100 | the loop filter follows the root |
+| **diffuse** | 0–99 | a short allpass diffuser in the room |
+
+### Scenes
+
+`T1` cycles four starting points: **lamp** (clear, short room), **choir** (the default; wide and
+slow), **comb** (short, bright room), **storm** (high drive/fold; the room self-oscillates). A
+scene sets all twenty-four values; it is a starting point, not a lock.
 
 ## Install
 
@@ -74,7 +97,7 @@ Requires Opus 2 core **2.8** or newer.
 CI builds the `.opmod` with the Blackfin toolchain (GNU binutils 2.38 + GCC 13.3, C only, no
 libc) and uploads it as an artifact; tagged builds attach it to a release.
 
-Locally:
+Locally, with the plugin kit and the Linux toolchain:
 
 ```sh
 git clone --depth 1 https://github.com/LizardMan245/opus /opt/opus
@@ -86,49 +109,99 @@ export OP1_BFIN_TOOLCHAIN=$HOME/bfin-build/linux-install
 python3 /opt/opus/plugin-kit/plugin_tool.py build /path/to/this/repo
 ```
 
-The toolchain is a Linux ELF binary; on macOS run it inside a Linux container.
+The toolchain is a Linux ELF binary; on macOS run it inside a Linux container. This repository's
+`tools/build-opmod.sh` is a small podman wrapper for a Mac that mounts the workspace at the same
+path, materialises any iCloud placeholders, and builds `build/sama.opmod`.
 
 ## Testing
 
 ### Regression suite
 
-`test/regression.py` builds the host harness — which compiles the **real** `sama.c` — renders
-twenty parameter configurations, and asserts the instrument still behaves:
+`test/regression.py` builds the host harness — which compiles the **real** `sama.c` — renders a
+set of configurations, and asserts the instrument still behaves:
 
-- it sounds, does not clip, and still sustains after the note stops;
-- **all twenty controls change the waveform** (a dead control produces a bit-identical file);
-- the loop decays when short and rings when long;
-- the oscillator is in tune; the four cores differ.
+- it sounds, does not clip, and keeps ringing after the note stops;
+- one voice has headroom, a triangle keeps its third harmonic, and six voices stay bounded;
+- the pitch and cross modulation destinations are audible;
+- the warp is at f/2, not f/8;
+- the tuned room is in tune and harmonic;
+- the pitch scale quantiser changes the melody;
+- freeze sustains the room; scenes change it; the face data survives save/load;
+- T4 on T2 reaches the system page, T4 on T1 pages a face;
+- every one of the twenty deep controls and the four macros changes the render;
+- an extreme six-voice setting is stable;
+- the analyzer's own selftest passes.
 
 ```sh
+python3 -m pip install numpy
 OPUS_KIT=/path/to/plugin-kit/sdk python3 test/regression.py
 ```
 
-This runs in CI on every push, before the plugin is built.
-
 ### Harness
 
-`test/host.c` renders audio: the twenty arguments are the five faces in k99 (niche, space,
-cross, mod, core), and it prints `peak / rms1 / rms2 / rms5 / zc`.
+`test/host.c` renders audio: the twenty arguments are the first five faces in k99 (niche, space,
+cross, mod, core); the macro face is set with `SAMA_MACRO=a,b,c,d`, and the settings/voices with
+`SAMA_SCALE`, `SAMA_TUNE`, `SAMA_WOW`, `SAMA_KEYTRACK`, `SAMA_DIFFUSE`, `SAMA_VOICES`,
+`SAMA_CHORD`, `SAMA_FREEZE_AT`, `SAMA_SCENE_AT`, `SAMA_PERSIST`, `SAMA_KEYTEST`. It prints
+`peak / rms1 / rms2 / rms5 / zc / clip` and, when asked, `persist 1`.
 
-`test/render.c` runs the page functions and dumps a display list; `test/render.py` draws it
-with the OP-1's own vector font — that is where the art above comes from.
+`test/analyze.py` is a standalone WAV analyzer (numpy): peak, RMS, crest, zero crossings, f0,
+spectral centroid, harmonic ratio, flatness, band energies, RMS windows, pitch/AM tracks.
 
-## Repo layout
+`test/render.c` runs the page functions and dumps a display list; `test/render.py` draws it with
+the OP-1's own vector font — that is where the art above comes from.
+
+## The DSP
 
 ```
-sama.c            the engine: voices, the room, the pages
-sama_art.h        page point tables (generated by tools/gen_art.py)
-sama_tab.h        DSP tables: delay lengths, filter, absorb, tone, breath (tools/gen_tab.py)
-manifest.txt      the plugin manifest (id jake.sama, core 2.8)
-cpu.txt           the declared CPU ceiling
-tools/            table and art generators
-test/host.c       host audio harness (real engine, stub API)
-test/regression.py  the regression suite
-test/render.c     host page renderer -> display list
-test/render.py    display list -> PNG (OP-1 font)
-art/              the screenshots in this README
+keys → pitch → six voices @ 88.2 kHz, 128 samples
+  core morph (tri/sine/saw/pulse, polyBLEP on the discontinuities)
+    → bias / DC
+    → fuzz (cubic soft clip)
+    → sine folder (1…8 folds, dry→folded crossfade)
+    → quiet sub (f/2)
+    → × envelope and velocity (the OS owns these)
+    → × cross gate
+    → sum, decimate to 44.1 kHz, 64 samples
+        ↓
+  the room @ 44.1 kHz
+    delay 20 ms–1.2 s (0.7 ms–1.2 s in tune mode)
+      → [tune: clean] / [else: allpass diffuser → SVF LP (Q 0.5–8) → DC → tone HP]
+      → write lowpass
+      → soft clip (drive knee)
+      → delay line
+        ↓
+  out = dry + (room − dry) × blend
+        → soft clip
 ```
+
+- **Six voices, one room.** Voice state is 20 bytes; the delay line is 65,536 samples (128 KB);
+  the diffuser is 223 samples. The OS renders the voice's amplitude envelope outside the engine.
+- **Tuned room.** With `tune`, the loop bypasses the in-loop filter/diffuser, the time knob picks
+  1–16 periods of the lowest held note, and the filter/resonance/tone move to the room's output.
+  The comb is then in tune with the note; high decay self-oscillates at the note.
+- **Room → voice feedback.** The room's last 64 samples are buffered; the voices read them
+  (interpolated 44.1→88.2 kHz) and phase-modulate the oscillator, depth from `cross`, sign from
+  `polar`. One block of latency (1.45 ms), highpassed and capped.
+- **Modulation.** The internal LFO is a looping shape (tri/ramp/square/S&H) with four
+  destinations. Slow pitch modulation is quantised to semitones or the chosen scale; fast pitch
+  modulation interpolates the semitone table for continuous FM. The filter/time destinations are
+  resolved once per block; the pitch ratio once per block.
+- **Filter.** TPT state-variable lowpass with error-feedback carries, Q 0.5–8, 60 Hz–9 kHz,
+  50–100 % key tracking on the root.
+- **Saturation.** A 129-point `u − u³/3` table with a variable knee; unity small-signal gain, so
+  drive colours the loop without changing its gain.
+- **Persistence.** `{magic, version, face, 24 values}` travels in `opus_engine_data`; saved and
+  restored with the sound.
+
+## What is deliberately not here
+
+Tempo sync, sample playback, an audio input, a clean digital delay, a linear loop, a conventional
+filter-with-envelope voice, a sixth deep face. The instrument's character is the room: its loss,
+its saturation, its own filter, and the couplings between the room and the source.
+
+The room feedback has one block of latency and the filter/time modulation is block-rate by
+design; the voice pitch and the audio-rate feedback are the fast path.
 
 ## Credits
 

@@ -3,11 +3,18 @@ opmod     1
 id        jake.sama
 name      Sama
 author    doo-nothing
-version   0.7.1
+version   1.0.0
 core      2.8
 adds      engine sama
-uses      t3 synth modal "next face: niche, space"
-uses      blue_push synth modal "next face"
-uses      green_push synth modal "next face"
-uses      white_push synth modal "next face"
-uses      orange_push synth modal "next face"
+uses      t3 synth modal "previous face"
+uses      t4 synth modal "next face"
+uses      t1 synth modal "next scene (shift: freeze)"
+uses      blue_push synth modal "niche face"
+uses      green_push synth modal "space face"
+uses      white_push synth modal "cross face"
+uses      orange_push synth modal "core face"
+setting   scale chromatic,major,minor,pentatonic chromatic "pitch mod scale"
+setting   tune off,on off "tune room to root"
+setting   wow 0 99 18 "tape wow"
+setting   keytrack 0 100 70 "filter key tracking"
+setting   diffuse 0 99 30 "loop diffusion"

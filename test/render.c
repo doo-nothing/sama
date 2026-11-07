@@ -20,6 +20,7 @@ int opus_engine_data(void *b, int max) { (void)b; (void)max; return 0; }
 int opus_engine_data_set(const void *b, int n) { (void)b; (void)n; return 0; }
 int opus_engine_knob_set(int k, int v) { (void)k; (void)v; return 1; }
 int opus_setting(struct opl_self *s, const char *n) { (void)s; (void)n; return 0; }
+void opus_on_setting(struct opl_self *s, void (*fn)(const char *, int)) { (void)s; (void)fn; }
 #include <stdarg.h>
 int fw_snprintf(char *d, unsigned n, const char *f, ...) { va_list ap; va_start(ap, f); int r = vsnprintf(d, n, f, ap); va_end(ap); return r; }
 int fw_shift_held(void) { return 0; }
@@ -78,7 +79,7 @@ int main(int argc, char **argv)
     memset(&self, 0, sizeof self);
     dl = fopen(argv[1], "w");
     opl_init(&self);
-    static short k[4] = { 18204, 20190, 29126, 17873 };
+    static short k[4] = { 14894, 23168, 30450, 16548 };
     for (int i = 0; i < 4; ++i) fv[0][i] = k[i];
     for (int f = 0; f < F_N; ++f) {
         face = f;

@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.0.0
+
+**sama 1.0: one room, tuned and coupled.** The instrument now has a body, a performance layer,
+and the tests to prove it still behaves.
+
+- **six faces**: niche, space, cross, mod, core and a new **macro** face (body / pressure /
+  motion / space). The four encoder pushes jump to the first four; T3/T4 page the rest.
+- **tuned room** (`tune` setting): the time knob selects 1–16 periods of the lowest held note,
+  the loop runs clean, and the filter/resonance/tone move to the room's output. High decay now
+  self-oscillates *in tune* with the note instead of at a random resonance.
+- **room → voice feedback**: the room's last 64 samples are buffered and phase-modulate the
+  oscillator at audio rate (depth from `cross`, sign from `polar`), with a hard cap and a
+  highpass. One block of latency.
+- **playability**: a note-on strike (folder + click + filter), root-relative filter/folder key
+  tracking, four scenes (lamp / choir / comb / storm) on T1, and a freeze on shift+T1.
+- **timbre**: filter resonance Q 0.5–8; continuous core morph (tri/sine/saw/pulse) with polyBLEP;
+  `bias` and `growl` replace the old shape/grit (folder symmetry, sub→phase FM); a 223-sample
+  allpass diffuser; tape wow; a quiet f/2 sub; a cubic soft clip with **unity small-signal gain**.
+- **pitch**: a semitone ratio table; slow pitch mod quantised to semitones or the chosen scale
+  (chromatic/major/minor/pentatonic); fast pitch mod interpolates the table for continuous FM.
+- **gain staging**: one voice has headroom, a 1/√n voice-count gain, and one final soft clip. A
+  triangle keeps its third harmonic; six voices stay bounded.
+- **envelope**: the room envelope is mean-abs/peak over the block, not one sample; the cross gate
+  is ramped per sample; the shared warp follows the lowest active voice at f/2, not the last
+  voice at f/8.
+- **persistence**: all 24 face values plus the face travel in `opus_engine_data`; a saved sound
+  restores the whole instrument. The OS's four knobs for the saved face are merged over the data.
+- **control map**: T4 on T2 goes to the system; T4 on T1 pages a face; the manifest, README and
+  code agree. T2/T4 remain the system's envelope/LFO pages.
+- **tests**: `test/analyze.py` (f0, centroid, harmonic ratio, crest, pitch/AM tracks, bands);
+  `test/regression.py` now covers six voices, the gain/3rd harmonic, pitch/cross depth, the f/2
+  warp, the tuned room, the scale, freeze, scenes, persistence, key routing, every deep control
+  and macro, and an extreme six-voice setting. CI installs numpy.
+- **build**: `tools/build-opmod.sh` builds the `.opmod` in a cached Linux container on macOS;
+  version 1.0.0; CPU claim 320,000 cycles (device measurement pending).
+
+Fixes along the way: the loop's soft clip lost gain as the knee narrowed (the tail shortened with
+drive); the tuned room's first highpass-bypass attempt silenced it; the freeze could not overcome
+the loop's filter loss; the dead `g_breath`/`tlen` code, the stale "v18", the generator writing
+outside the repo, and the stale face defaults/comments are gone.
+
 ## 0.7.1
 
 - **fixed: drive added loop gain.** It multiplied the feedback path, so the loop
