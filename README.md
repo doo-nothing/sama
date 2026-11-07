@@ -49,9 +49,9 @@ a lamp. It is not affiliated with or endorsed by Make Noise; it is a homage.
 
 **T2 and T4 stay the system's pages** (envelope, LFO). Every sama control lives on **T1**, where
 encoder turns are actually delivered: the four knobs are the OS's own, and a *face* decides what
-they mean. **T3** pages to the previous face, **T4** to the next; the four encoder pushes jump to
-niche / space / cross / core. **T1** (without shift) loads the next scene; **shift + T1** freezes
-the room.
+they mean. **T3** pages to the previous face; **T4** stays the system's LFO page. The four encoder pushes
+jump to niche / space / cross / core. **T1** (without shift) loads the next scene; **shift + T1**
+freezes the room.
 
 Each face keeps its own four values, and all twenty-four values (six faces) travel with the
 sound in the engine's own data block, so a saved sound restores the whole instrument.
@@ -127,7 +127,7 @@ set of configurations, and asserts the instrument still behaves:
 - the tuned room is in tune and harmonic;
 - the pitch scale quantiser changes the melody;
 - freeze sustains the room; scenes change it; the face data survives save/load;
-- T4 on T2 reaches the system page, T4 on T1 pages a face;
+- T4 reaches the system page on T1 and T2; T3 pages a face on T1;
 - every one of the twenty deep controls and the four macros changes the render;
 - an extreme six-voice setting is stable;
 - the analyzer's own selftest passes.

@@ -112,9 +112,9 @@ Encoder turns reach a plugin engine **only on its own T1 page** on this firmware
 pages gives you controls that cannot be turned.
 
 sama therefore leaves **T2 and T4 to the system** (envelope, LFO) and puts everything on T1: the
-four encoders are the OS's own, so they always work, and a **face** decides what they mean. T3 and
-T4 page through six faces while the screen stays on T1. The four encoder pushes jump directly to
-niche / space / cross / core. Each face keeps its own four values, and the whole set travels with
+four encoders are the OS's own, so they always work, and a **face** decides what they mean. T3 pages
+through six faces while the screen stays on T1; T4 stays the system's LFO page. The four
+encoder pushes jump directly to niche / space / cross / core. Each face keeps its own four values, and the whole set travels with
 the sound.
 
 ## Numbers

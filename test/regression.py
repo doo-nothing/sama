@@ -203,8 +203,10 @@ def main():
     kt = run(BASE, dict(BASE_ENV, SAMA_KEYTEST="1"), "keytest")
     check("T4 on T2 passes to the OS", kt.get("keypage_t2") == 0,
           "keypage_t2=%s" % kt.get("keypage_t2"))
-    check("T4 on T1 pages a face", kt.get("keypage_t1") == 1,
+    check("T4 on T1 passes to the OS", kt.get("keypage_t1") == 0,
           "keypage_t1=%s" % kt.get("keypage_t1"))
+    check("T3 on T1 pages a face", kt.get("keypage_t3") == 1,
+          "keypage_t3=%s" % kt.get("keypage_t3"))
 
     print("\ncontrols (each against its own 0 and 99):")
     for i, name in enumerate(sum(NAMES, [])):

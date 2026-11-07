@@ -48,7 +48,8 @@ struct sama_data {
 
 static struct opl_self *me;
 static short *line;
-static short room[64];             /* the loop's last block, for room -> voice */
+static short room[2][64];          /* double-buffered room -> voice feedback */
+static volatile int g_room_sel;
 static short ap[APLEN];
 static unsigned widx, apw;
 static int tbase, wlp, ic1, ic2, dcz, hlp, e1, e2;
@@ -90,7 +91,7 @@ static volatile int g_root_step = REF_STEP;
 static volatile unsigned g_min_step = 0xFFFFFFFFu;
 static volatile int g_strike = 0, g_vgain = 32767, g_active_seen = 0;
 static volatile int g_fbd = 0, g_fbd2 = 0, g_fbdc = 0;
-static volatile int g_freeze = 0, g_tuned_k = 0;
+static volatile int g_freeze = 0, g_tuned_k = 0, g_load_pending = 0;
 static volatile int g_scene = 0, g_msg_timer = 0;
 static char g_msg[12];
 static int g_scale = 0, g_tune = 0, g_wow = 18, g_keytrack = 70, g_diffuse = 30;
@@ -110,9 +111,9 @@ static int streq(const char *a, const char *b)
 static int softx(int x, int ik, int knee, int gain)
 {
     int s = x < 0 ? -1 : 1;
-    int a = x < 0 ? -x : x;
-    if (a > knee) a = knee;
-    int u = (a * ik) >> 12;
+    unsigned ua = x < 0 ? (unsigned)(-(long long)x) : (unsigned)x;
+    if (ua > (unsigned)knee) ua = (unsigned)knee;
+    int u = (int)((ua * (unsigned)ik) >> 12);
     if (u > 32767) u = 32767;
     int i = u >> 8, fr = u & 255;
     int f = SOFTTAB[i] + (((SOFTTAB[i + 1] - SOFTTAB[i]) * fr) >> 8);
@@ -196,17 +197,10 @@ static void v_init(void *v, int index)
     s->strike = 0;
     s->seed = 0x9E3779B9u * (unsigned)(index + 1);
     if (index == 0) {
-        struct sama_data d;
-        int n = opus_engine_data(&d, sizeof d);
-        if (n == (int)sizeof d && d.magic == MAGIC && d.version == DATA_VERSION &&
-            d.face >= 0 && d.face < F_N) {
-            face = d.face;
-            for (int f = 0; f < F_N; ++f)
-                for (int i = 0; i < 4; ++i)
-                    fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
-        } else {
-            face = F_NICHE;
-        }
+        /* init can run in the audio interrupt; opus_engine_data is not audio-safe.
+         * e_on_block loads the sound's face data in the sequencer thread. */
+        g_load_pending = 1;
+        face = F_NICHE;
         g_gate = 32767;
         g_gate_next = 32767;
         g_drift = 0;
@@ -246,6 +240,7 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     int gate0 = g_gate, gate1 = g_gate_next;
     int vg = g_vgain;
     int fbd = g_fbd, fbd2 = g_fbd2;
+    const short *rm = room[g_room_sel];
     int key = g_keytrack;
     ++g_active_seen;
 
@@ -303,8 +298,8 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         }
         if (fbd) {
             int ri = n >> 1;
-            int fb = room[ri];
-            if (n & 1) fb += (room[ri < 63 ? ri + 1 : 63] - fb) >> 1;
+            int fb = rm[ri];
+            if (n & 1) fb += (rm[ri < 63 ? ri + 1 : 63] - fb) >> 1;
             g_fbdc += (fb - g_fbdc) >> 6;
             fb -= g_fbdc;
             ph = (ph + ((fb * fbd) >> 15)) & 0xFFFF;
@@ -331,7 +326,7 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         s->dc += (x - s->dc) >> 10;
 
         if (fuzz)
-            x = softx((x * drive) >> 15, 4096, 32767, 0);
+            x = softx((int)(((long long)x * drive) >> 15), 4096, 32767, 0);
 
         {
             int fph = (x * gq8) >> 8;
@@ -339,15 +334,16 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
             int fr = fph & 255;
             int s0 = SINTAB[i0], s1 = SINTAB[(i0 + 1) & 255];
             int f = s0 + (((s1 - s0) * fr) >> 8);
-            x = x + (((f - x) * famt) >> 15);
+            x += (int)(((long long)(f - x) * famt) >> 15);
         }
 
         x += (st * 2621) >> 15;                    /* a quiet sub, -22 dB */
 
         int y = (x * 26) >> 5;
+        if (y > 32767) y = 32767; else if (y < -32768) y = -32768;
         int gate = gate0 + (((gate1 - gate0) * n) >> 7);
-        if (R_cross) y = (y * gate) >> 15;
-        y = (y * vg) >> 15;
+        if (R_cross) y = (int)(((long long)y * gate) >> 15);
+        y = (int)(((long long)y * vg) >> 15);
         out[n] = (short)softx(y, 4096, 32767, 0);
     }
 }
@@ -597,7 +593,7 @@ static void b_block(short *buf)
             }
             dcz += (y - dcz) >> 9;
             y -= dcz;
-            hlp += ((y - hlp) * twc) >> 15;
+            hlp += (int)(((long long)(y - hlp) * twc) >> 15);
             y -= hlp;
             yo = y;
         }
@@ -633,23 +629,24 @@ static void b_block(short *buf)
         }
 
         {
-            int w = src + ((y * dec) >> 15);
+            int w = src + (int)(((long long)y * dec) >> 15);
             w = softx(w, ik, knee, 0);
-            wlp += ((w - wlp) * wc) >> 15;
+            wlp += (int)(((long long)(w - wlp) * wc) >> 15);
             int ws = softx(wlp, 4096, 32767, 0);
             line[widx] = (short)ws;
             widx = (widx + 1) & (DMASK - 1);
         }
 
-        room[n] = (short)y;
+        room[g_room_sel ^ 1][n] = (short)y;
         env_acc += y < 0 ? -y : y;
 
         {
-            int o = src + (((yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
+            int o = src + (int)(((long long)(yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
             buf[n] = (short)softx(o, 4096, 32767, 0);
         }
     }
     g_subph = subph;
+    g_room_sel ^= 1;
     env_acc >>= 6;
     g_drift += ((env_acc - g_drift) >> 4);
     g_gate = g_gate_next;
@@ -887,7 +884,7 @@ static void page_t1(void)
     }
 
     opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.0");
+    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.2");
     if (g_msg_timer) {
         opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
         --g_msg_timer;
@@ -957,8 +954,8 @@ static int e_key(int key, int pressed, int page)
         }
         return 1;
     }
-    if (key == 0x08) { set_face(face - 1); return 1; }     /* T3: previous */
-    if (key == 0x09) { set_face(face + 1); return 1; }     /* T4: next */
+    if (key == 0x08) { set_face(face - 1); return 1; }     /* T3: previous face on T1 */
+    if (key == 0x09) return 0;                              /* T4: the system's LFO page */
     if (key >= 0x3B && key <= 0x3E) { set_face(key - 0x3B); return 1; }
     return 0;
 }
@@ -993,6 +990,23 @@ static const struct opus_engine SAMA = {
     .key = e_key,
 };
 
+static void e_on_block(void)
+{
+    if (!g_load_pending) return;
+    g_load_pending = 0;
+    struct sama_data d;
+    int n = opus_engine_data(&d, sizeof d);
+    if (n == (int)sizeof d && d.magic == MAGIC && d.version == DATA_VERSION &&
+        d.face >= 0 && d.face < F_N) {
+        face = d.face;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i)
+                fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
+    } else {
+        face = F_NICHE;
+    }
+}
+
 int opl_init(struct opl_self *self)
 {
     me = self;
@@ -1018,7 +1032,9 @@ int opl_init(struct opl_self *self)
     g_gate_next = 32767;
     g_vgain = 32767;
     g_tuned_k = 0;
+    g_room_sel = 0;
     if (opus_engine_add(self, &SAMA) < 0) return -1;
+    opus_on_block(self, e_on_block);
     opus_on_setting(self, e_setting);
     return 0;
 }

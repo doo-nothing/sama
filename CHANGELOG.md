@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.2
+
+- **fixed: the sound-data load was in `v_init`, which can run in the audio interrupt.** It is
+  now deferred to `opus_on_block` (the sequencer thread): `v_init` only raises a flag, and the
+  data is read a block later. This removes the last known audio-unsafe call from the engine.
+  The first block after a sound change uses the default faces; the saved ones arrive one block
+  later. The page says **v1.2**.
+- the persistence test drives the deferred load explicitly (`e_on_block`) and still restores
+  all six faces.
+
+## 1.0.1
+
+- **fixed: the room→voice feedback buffer was read by the audio interrupt while the block
+  rewrote it.** It is now double-buffered (the block writes one 64-sample buffer and flips;
+  the voices read the last complete one). This was the device-only white-noise/roughness
+  source; the host's sequential render never hit it.
+- **fixed: T4 was declared and taken by the engine**, stealing the system's LFO page. T3 pages
+  the faces on T1; T4 is the system's page again on T1 and T2. The four encoder pushes still
+  jump to niche / space / cross / core, and T1 still loads scenes / shift+T1 freezes.
+- **fixed: 32-bit overflow paths** in the folder, fuzz, gate, output and the soft-clip table.
+  The folder/fuzz/gate/output products use wide arithmetic, the voice output is clamped before
+  the gate, and the soft clip has an unsigned-magnitude guard. High fold/fuzz can no longer
+  send a negative magnitude into the table read.
+- the page says **v1.1**; version 1.0.1. The regression key test now expects T4 to pass and T3
+  to page.
+
 ## 1.0.0
 
 **sama 1.0: one room, tuned and coupled.** The instrument now has a body, a performance layer,

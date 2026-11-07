@@ -81,6 +81,7 @@ int opus_setting(struct opl_self *s, const char *n)
     return 0;
 }
 void opus_on_setting(struct opl_self *s, void (*fn)(const char *, int)) { (void)s; (void)fn; }
+void opus_on_block(struct opl_self *s, void (*fn)(void)) { (void)s; (void)fn; }
 int fw_snprintf(char *d, unsigned n, const char *f, ...)
 {
     if (n) d[0] = 0;
@@ -157,8 +158,9 @@ int main(int argc, char **argv)
 
     if (env_int("SAMA_KEYTEST", 0)) {
         int a = ENG->key(0x09, 1, 1);      /* T4 on T2: the system's page */
-        int b = ENG->key(0x09, 1, 0);      /* T4 on T1: our page */
-        printf("keypage_t2 %d\nkeypage_t1 %d\n", a, b);
+        int b = ENG->key(0x09, 1, 0);      /* T4 on T1: the system's page */
+        int c = ENG->key(0x08, 1, 0);      /* T3 on T1: our page */
+        printf("keypage_t2 %d\nkeypage_t1 %d\nkeypage_t3 %d\n", a, b, c);
         return 0;
     }
 
@@ -259,6 +261,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 4; ++i) fv[f][i] = 0;
         face = F_NICHE;
         v_init(VO[0], 0);
+        e_on_block();                       /* the sequencer-thread load */
         int ok = (face == exp_face && k99(fv[exp_face][0]) == exp0 && k99(fv[exp_face][3]) == exp3);
         printf("persist %d\n", ok);
     }
