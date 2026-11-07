@@ -36,6 +36,7 @@ static short VO[6][16];                /* the engine voice is 20 bytes; core giv
 static unsigned char DATA[256];
 static int DATA_N;
 static int HOST_SHIFT;
+static int HOST_FN;
 
 static int env_int(const char *name, int dflt)
 {
@@ -89,7 +90,7 @@ int fw_snprintf(char *d, unsigned n, const char *f, ...)
     return 0;
 }
 int fw_shift_held(void) { return HOST_SHIFT; }
-int opus_fn_held(void) { return 0; }
+int opus_fn_held(void) { return HOST_FN; }
 
 void opus_page_stroke_line(int a, int b, int c, int d, int e, int f)
 { (void)a;(void)b;(void)c;(void)d;(void)e;(void)f; }
@@ -160,7 +161,8 @@ int main(int argc, char **argv)
         int a = ENG->key(0x09, 1, 1);      /* T4 on T2: the system's page */
         int b = ENG->key(0x09, 1, 0);      /* T4 on T1: the system's page */
         int c = ENG->key(0x08, 1, 0);      /* T3 on T1: our page */
-        printf("keypage_t2 %d\nkeypage_t1 %d\nkeypage_t3 %d\n", a, b, c);
+        int d = ENG->key(0x06, 1, 0);      /* plain T1: the OS page key */
+        printf("keypage_t2 %d\nkeypage_t1 %d\nkeypage_t3 %d\nkeypage_t1key %d\n", a, b, c, d);
         return 0;
     }
 
@@ -215,7 +217,9 @@ int main(int argc, char **argv)
         }
         if (scene_at >= 0.0 && !scened && i >= (int)(scene_at * 44100.0)) {
             HOST_SHIFT = 0;
-            ENG->key(0x06, 1, 0);
+            HOST_FN = 1;
+            ENG->key(0x06, 1, 0);          /* FN+T1: next scene */
+            HOST_FN = 0;
             scened = 1;
         }
 

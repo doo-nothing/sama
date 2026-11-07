@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3
+
+- **fixed: plain T1 on the T1 page was hijacked as "next scene".** T1 is the page key, so
+  pressing it to return to T1 cycled scenes — and could land on **storm**, the deliberately
+  self-oscillating room, which sounds like a loud unstable drone. Plain T1 now passes to the
+  OS; **FN + T1** loads the next scene; **shift + T1** freezes. The manifest declares only
+  `t1 fn` and `t1 shift`. The page says **v1.3**.
+
 ## 1.0.2
 
 - **fixed: the sound-data load was in `v_init`, which can run in the audio interrupt.** It is

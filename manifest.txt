@@ -3,11 +3,12 @@ opmod     1
 id        jake.sama
 name      Sama
 author    doo-nothing
-version   1.0.2
+version   1.0.3
 core      2.8
 adds      engine sama
 uses      t3 synth modal "previous face"
-uses      t1 synth modal "next scene (shift: freeze)"
+uses      t1 fn synth modal "next scene"
+uses      t1 shift synth modal "freeze"
 uses      blue_push synth modal "niche face"
 uses      green_push synth modal "space face"
 uses      white_push synth modal "cross face"

@@ -884,7 +884,7 @@ static void page_t1(void)
     }
 
     opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.2");
+    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.3");
     if (g_msg_timer) {
         opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
         --g_msg_timer;
@@ -945,14 +945,17 @@ static int e_key(int key, int pressed, int page)
 {
     if (!pressed) return 0;
     if (page != 0) return 0;
-    if (key == 0x06) {                         /* T1: next scene, shift: freeze */
+    if (key == 0x06) {                         /* T1: FN next scene, shift freeze */
         if (fw_shift_held()) {
             g_freeze = !g_freeze;
             set_msg(g_freeze ? "freeze" : "unfreeze");
-        } else {
-            load_scene(g_scene + 1);
+            return 1;
         }
-        return 1;
+        if (opus_fn_held()) {
+            load_scene(g_scene + 1);
+            return 1;
+        }
+        return 0;                              /* plain T1 is the OS page key */
     }
     if (key == 0x08) { set_face(face - 1); return 1; }     /* T3: previous face on T1 */
     if (key == 0x09) return 0;                              /* T4: the system's LFO page */
