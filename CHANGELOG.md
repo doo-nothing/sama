@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.6
+
+- **fixed: 1.0.5 added a 128-byte stack array (`short in[64]`) to the audio-interrupt block.**
+  On the OP-1's small audio stack that can overrun and hang the boot when the last sound is
+  sama. The voice sum is read in place again (the API says block runs in the audio block, so
+  the snapshot was unnecessary). All 1.0.5 audit/CPU fixes remain.
+- page **v1.6**.
+
+## 1.0.5
+
+- **fixed:** the last signed shift in the pitch quantizer (`fr`), the core-page soft-clip
+  overflow, and the sample-and-hold seed (it never advanced, so shape≥75 was a constant).
+- the active voice count is now kept by `note_on`/`release`, not the per-block render count;
+  the first/skipped block no longer gets full gain with six voices.
+- the tuned room uses the block's local root (with the REF fallback); the gate bus is clamped
+  before its shift; the room buffer gets a compiler barrier before its index flip; the
+  64-sample voice sum is snapshotted before the block writes it back.
+- **efficiency:** the per-sample 64-bit multiplies in the folder, fuzz, gate, output,
+  warp/wow, growl, loop one-poles and polyBLEP are 32-bit again, with clamps/pre-shifts that
+  keep the products in range. On BF524 those were libgcc `__muldi3` calls; this should reduce
+  the audio load and the UI lag. The genuinely wide ops (pitch ratio, tune, soft-clip table)
+  stay 64-bit.
+- page **v1.5**.
+
 ## 1.0.4
 
 - **fixed: the six-voice gain table was out of bounds.** It was a 6-entry table indexed by

@@ -90,7 +90,7 @@ static volatile int g_breath = 16384, g_drift = 0, g_pitch_semi = 0, g_ratio = 6
 static volatile int g_gate = 32767, g_gate_next = 32767;
 static volatile int g_root_step = REF_STEP;
 static volatile unsigned g_min_step = 0xFFFFFFFFu;
-static volatile int g_strike = 0, g_vgain = 32767, g_active_seen = 0;
+static volatile int g_strike = 0, g_vgain = 32767, g_active = 0;
 static volatile int g_fbd = 0, g_fbd2 = 0, g_fbdc = 0;
 static volatile int g_freeze = 0, g_tuned_k = 0, g_load_pending = 0;
 static volatile int g_scene = 0, g_msg_timer = 0;
@@ -127,12 +127,13 @@ static int blep(int t, int dt)
 {
     if (dt < 2) return 0;
     if (t < dt) {
-        int x = (int)(((long long)t * 65536) / dt);
-        return 2 * x - (int)(((long long)x * x) >> 16) - 65536;
+        int x = (t * 65536) / dt;
+        return 2 * x - (int)(((unsigned)x * (unsigned)x) >> 16) - 65536;
     }
     if (t > 65536 - dt) {
-        int x = (int)(((long long)(t - 65536) * 65536) / dt);
-        return (int)(((long long)x * x) >> 16) + 2 * x + 65536;
+        int x = ((t - 65536) * 65536) / dt;
+        unsigned ux = (unsigned)(x < 0 ? -x : x);
+        return (int)((ux * ux) >> 16) + 2 * x + 65536;
     }
     return 0;
 }
@@ -173,12 +174,12 @@ static int log2q8(unsigned x)
 }
 
 /* delay time in Q8 samples for the tuned room: k periods of the root, k = 1..16 */
-static int tuned_target(int time)
+static int tuned_target(int time, int root)
 {
     int want = TIMETAB[time];
-    if (!g_tune || !g_root_step) { g_tuned_k = 0; return want; }
+    if (!g_tune || !root) { g_tuned_k = 0; return want; }
     int k = 1 + (time * 15) / 99;
-    unsigned long long period = (4294967296ULL * 256ULL) / (2ULL * (unsigned)g_root_step);
+    unsigned long long period = (4294967296ULL * 256ULL) / (2ULL * (unsigned)root);
     unsigned long long d = period * (unsigned)k;
     int lo = 32 * 256, hi = 52920 * 256;          /* 0.7 ms .. 1.2 s */
     if (d < (unsigned)lo) d = (unsigned)lo;
@@ -202,6 +203,7 @@ static void v_init(void *v, int index)
          * e_on_block loads the sound's face data in the sequencer thread. */
         g_load_pending = 1;
         face = F_NICHE;
+        g_active = 0;
         g_gate = 32767;
         g_gate_next = 32767;
         g_drift = 0;
@@ -219,6 +221,7 @@ static void v_note_on(void *v, const short *knobs)
 {
     struct voice *s = v;
     (void)knobs;
+    if (g_active < 6) ++g_active;
     s->strike = 32767;
     s->seed = s->seed * 1664525u + 1013904223u;
     s->ph = s->seed * 0x9E3779B9u;
@@ -229,6 +232,7 @@ static void v_note_on(void *v, const short *knobs)
 static void v_release(void *v, const short *knobs)
 {
     (void)v; (void)knobs;
+    if (g_active > 0) --g_active;
 }
 
 static void v_render(void *v, short *out, const short *par, const unsigned *pitch)
@@ -243,7 +247,6 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     int fbd = g_fbd, fbd2 = g_fbd2;
     const short *rm = room[g_room_sel];
     int key = g_keytrack;
-    ++g_active_seen;
 
     if (R_polar < 50) drift = -drift;             /* polar < 50 sags, > 50 lifts */
 
@@ -275,8 +278,8 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         int st = tri16((int)(s->sub >> 16));
 
         if (growl) {
-            long long md = (long long)(nstep >> 12) * st;
-            nstep += (int)((md * growl) >> 12);
+            int md = ((nstep >> 12) * st) >> 4;
+            nstep += (md * growl) >> 8;
             if (nstep < 1) nstep = 1;
         }
 
@@ -326,8 +329,10 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         x -= s->dc;
         s->dc += (x - s->dc) >> 10;
 
-        if (fuzz)
-            x = softx((int)(((long long)x * drive) >> 15), 4096, 32767, 0);
+        if (fuzz) {
+            if (x > 32767) x = 32767; else if (x < -32768) x = -32768;
+            x = softx((x * (drive >> 1)) >> 14, 4096, 32767, 0);
+        }
 
         {
             int fph = (x * gq8) >> 8;
@@ -335,7 +340,7 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
             int fr = fph & 255;
             int s0 = SINTAB[i0], s1 = SINTAB[(i0 + 1) & 255];
             int f = s0 + (((s1 - s0) * fr) >> 8);
-            x += (int)(((long long)(f - x) * famt) >> 15);
+            x += ((f - x) * famt) >> 15;
         }
 
         x += (st * 2621) >> 15;                    /* a quiet sub, -22 dB */
@@ -343,8 +348,8 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         int y = (x * 26) >> 5;
         if (y > 32767) y = 32767; else if (y < -32768) y = -32768;
         int gate = gate0 + (((gate1 - gate0) * n) >> 7);
-        if (R_cross) y = (int)(((long long)y * gate) >> 15);
-        y = (int)(((long long)y * vg) >> 15);
+        if (R_cross) y = (y * gate) >> 15;
+        y = (y * vg) >> 15;
         out[n] = (short)softx(y, 4096, 32767, 0);
     }
 }
@@ -359,6 +364,8 @@ static void b_block(short *buf)
     else for (int i = 0; i < 4; ++i) fv[face][i] = par[i];
 
     if (!line) return;
+
+    g_seed = g_seed * 1103515245u + 12345u;
 
     int fold = k99(fv[F_NICHE][0]);
     int time = k99(fv[F_NICHE][1]);
@@ -429,7 +436,7 @@ static void b_block(short *buf)
     fi += (g_strike * 16) >> 15;
 
     int target = TIMETAB[time];
-    if (g_tune) target = tuned_target(time);
+    if (g_tune) target = tuned_target(time, root);
 
     /* the internal modulator: a looping shape, steered to one destination */
     g_bph += BRTTAB[rate];
@@ -476,7 +483,7 @@ static void b_block(short *buf)
             {
                 int n = g_pitch_semi >> 8;
                 if (n < -12) n = -12; else if (n > 12) n = 12;
-                int fr = g_pitch_semi - (n << 8);
+                int fr = g_pitch_semi - n * 256;
                 if (fr < 0) fr = 0; else if (fr > 255) fr = 255;
                 if (n >= 12) g_ratio = (int)RATIO[24];
                 else g_ratio = (int)RATIO[n + 12] +
@@ -492,7 +499,7 @@ static void b_block(short *buf)
     /* the loop's gate: the room's envelope ducks or lifts the source */
     {
         int bus = g_drift < 0 ? -g_drift : g_drift;
-        bus = (bus << 3) > 32767 ? 32767 : bus << 3;
+        bus = bus > 4095 ? 32767 : bus << 3;
         int dpth = (cross * (50 - polar) * 3) / 99;
         int g2 = 32767 - ((bus * dpth) >> 7);
         if (g_xmod) {
@@ -547,11 +554,11 @@ static void b_block(short *buf)
             int sp = (int)(subph >> 16);
             int st = sp < 32768 ? sp * 2 - 32768 : 98304 - sp * 2;
             int w = 0;
-            if (!g_tune) w = (int)((((long long)tbase * st) >> 31) * wd);
+            if (!g_tune) w = (((tbase >> 8) * st) >> 23) * wd;
             if (!g_tune && wowd) {
                 g_wowph += 48696;
                 int ws = SINTAB[(g_wowph >> 24) & 255];
-                w += (int)((((long long)tbase * ws) >> 15) * wowd / 19800);
+                w += ((((tbase >> 8) * ws) >> 7) * wowd) / 19800;
             }
             tnow = tbase + w;
             if (tnow < 32 * 256) tnow = 32 * 256;
@@ -594,7 +601,7 @@ static void b_block(short *buf)
             }
             dcz += (y - dcz) >> 9;
             y -= dcz;
-            hlp += (int)(((long long)(y - hlp) * twc) >> 15);
+            hlp += ((y - hlp) * twc) >> 15;
             y -= hlp;
             yo = y;
         }
@@ -617,7 +624,7 @@ static void b_block(short *buf)
             }
             dcz += (yo - dcz) >> 9;
             yo -= dcz;
-            hlp += (int)(((long long)(yo - hlp) * twc) >> 15);
+            hlp += ((yo - hlp) * twc) >> 15;
             yo -= hlp;
             if (apg) {
                 int delayed = ap[apw];
@@ -630,9 +637,9 @@ static void b_block(short *buf)
         }
 
         {
-            int w = src + (int)(((long long)y * dec) >> 15);
+            int w = src + ((y * dec) >> 15);
             w = softx(w, ik, knee, 0);
-            wlp += (int)(((long long)(w - wlp) * wc) >> 15);
+            wlp += ((w - wlp) * wc) >> 15;
             int ws = softx(wlp, 4096, 32767, 0);
             line[widx] = (short)ws;
             widx = (widx + 1) & (DMASK - 1);
@@ -642,18 +649,18 @@ static void b_block(short *buf)
         env_acc += y < 0 ? -y : y;
 
         {
-            int o = src + (int)(((long long)(yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
+            int o = src + (((yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
             buf[n] = (short)softx(o, 4096, 32767, 0);
         }
     }
     g_subph = subph;
+    __asm__ volatile("" ::: "memory");
     g_room_sel ^= 1;
     env_acc >>= 6;
     g_drift += ((env_acc - g_drift) >> 4);
     g_gate = g_gate_next;
     g_gate_next = R_gate;
-    g_vgain = VGAIN[g_active_seen > 6 ? 6 : (g_active_seen < 0 ? 0 : g_active_seen)];
-    g_active_seen = 0;
+    g_vgain = VGAIN[g_active > 6 ? 6 : (g_active < 0 ? 0 : g_active)];
     g_min_step = 0xFFFFFFFFu;
     if (g_strike) g_strike -= g_strike >> 3;
 }
@@ -812,7 +819,7 @@ static void draw_core(int core, int bias, int growl, int fuzz)
         int v = a + ((b - a) * cf) / 99;
         v += (bias - 50) * 120;
         if (growl) v += (SINTAB[(ph >> 8) & 255] * growl) / 300;
-        if (fuzz) v = softx((v * (32768 + fuzz * 660)) >> 15, 4096, 32767, 0);
+        if (fuzz) v = softx((int)(((long long)v * (32768 + fuzz * 660)) >> 15), 4096, 32767, 0);
         int y = 66 - v * 34 / 32768;
         int x = 30 + i * 2;
         if (i) ln_c(prevx, prev, x, y, 256, C_GOLD);
@@ -885,7 +892,7 @@ static void page_t1(void)
     }
 
     opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.4");
+    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.6");
     if (g_msg_timer) {
         opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
         --g_msg_timer;
