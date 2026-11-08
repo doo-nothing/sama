@@ -56,6 +56,13 @@ jobs:
           python3 -m pip install --quiet pillow numpy
           OPUS_KIT="$KIT/plugin-kit/sdk" python3 test/regression.py
 
+      - name: Sanitizers
+        run: |
+          cd test
+          cc -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all \
+            -I"$KIT/plugin-kit/sdk" -o /tmp/host_san host.c -lm
+          SAMA_VOICES=6 UBSAN_OPTIONS=halt_on_error=1 ASAN_OPTIONS=halt_on_error=1 \
+            /tmp/host_san /tmp/san.wav 45 70 92 50 35 25 35 70 35 40 25 45 30 15 45 30 35 50 35 5
       - name: Host harness and art
         run: |
           cd test

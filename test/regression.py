@@ -145,8 +145,13 @@ def main():
     six = run(BASE, dict(BASE_ENV, SAMA_VOICES="6"), "six")
     check("six voices bounded", six["peak"] <= 32767, "peak=%.0f" % six["peak"])
     check("six voices no hard clip", six["clip"] == 0, "clip=%.0f" % six["clip"])
-    check("six voices louder", six["rms1"] >= 1.05 * base["rms1"],
+    check("six voices audible", six["rms1"] >= 0.5 * base["rms1"],
           "rms1=%.0f vs %.0f" % (six["rms1"], base["rms1"]))
+    sm = analyze.metrics(six["_wav"])
+    check("six voices stay tonal", sm["flatness"] <= 0.05,
+          "flatness=%.3f" % sm["flatness"])
+    check("six voices keep harmonics", sm["harmonic_ratio"] >= 0.30,
+          "harmonic=%.2f" % sm["harmonic_ratio"])
 
     print("\nmodulation:")
     p = run(PITCH, NEUTRAL, "pitch")
@@ -230,6 +235,18 @@ def main():
         b = run(BASE, dict(BASE_ENV, SAMA_MACRO=",".join(map(str, m1))), "m1")
         d = wave_diff(a["_wav"], b["_wav"])
         check("macro %-8s" % name, d >= 0.01, "waveform difference %.3f" % d)
+
+    print("\nhot spots:")
+    hp = list(BASE); hp[18] = 99
+    h = run(hp, dict(BASE_ENV, SAMA_CHORD="44"), "growl")
+    hm2 = analyze.metrics(h["_wav"])
+    check("high-note growl stable", hm2["flatness"] <= 0.15,
+          "flatness=%.3f" % hm2["flatness"])
+    rp = list(BASE); rp[11] = 99
+    r = run(rp, BASE_ENV, "res99")
+    rm = analyze.metrics(r["_wav"])
+    check("high-res room stable", rm["flatness"] <= 0.12,
+          "flatness=%.3f" % rm["flatness"])
 
     print("\nsettings:")
     d0 = run(BASE, dict(BASE_ENV, SAMA_DIFFUSE="0"), "d0")

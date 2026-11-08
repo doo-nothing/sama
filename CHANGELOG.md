@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.4
+
+- **fixed: the six-voice gain table was out of bounds.** It was a 6-entry table indexed by
+  the voice *count*, so six voices read element 6 (UBSan/ASan: stack-buffer-overflow; the
+  garbage value was ~1.0e9, hard-clipped by the soft clip into broadband noise). The table
+  now has a valid entry for every count 0–6 and is clamped. This is the main device-only
+  white-noise cause.
+- **fixed: the room feedback stored the unclamped filter output in a short.** At high
+  resonance the filter can exceed ±32767 (53% of samples at res=99), so the room read back a
+  wrapped value. It is clamped before the store.
+- **fixed: the growl multiply could overflow signed 32-bit** at high notes (chord 44,
+  growl 99); it uses 64-bit now.
+- **fixed: signed left shifts** in the pitch quantizer and the SVF error terms (UB), and the
+  tuned highpass multiply now uses 64-bit.
+- **fixed: the host harness wrote 64 samples past the render buffer** on the last block
+  (test harness only).
+- **tests:** six-voice flatness/harmonic checks (the old test only checked peak/clip, and
+  the soft clip caps at 21,843 so the clip count can never fail); a high-note growl test; a
+  high-resonance room test; a CI sanitizer run (ASan/UBSan, six voices). The page says
+  **v1.4**.
+
 ## 1.0.3
 
 - **fixed: plain T1 on the T1 page was hijacked as "next scene".** T1 is the page key, so

@@ -204,7 +204,7 @@ int main(int argc, char **argv)
     FILE *wav = fopen(argv[1], "wb");
     int released = 0, froze = 0, scened = 0;
 
-    for (int i = 0; i < total_n; i += 64) {
+    for (int i = 0; i + 64 <= total_n; i += 64) {
         if (!released && i >= play_n) {
             for (int v = 0; v < nv; ++v) ENG->release(VO[v], par);
             released = 1;

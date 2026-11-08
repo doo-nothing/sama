@@ -3,7 +3,7 @@ opmod     1
 id        jake.sama
 name      Sama
 author    doo-nothing
-version   1.0.3
+version   1.0.4
 core      2.8
 adds      engine sama
 uses      t3 synth modal "previous face"

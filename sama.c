@@ -84,6 +84,7 @@ static volatile int R_rate = 30, R_shape = 15, R_depth = 45, R_dest = 30;
 static volatile int R_core = 35, R_bias = 50, R_growl = 35, R_fuzz = 5;
 static volatile int R_diffuse = 30, R_wow = 18;
 static volatile int R_gate = 32767;
+static const int VGAIN[7] = { 32767, 32767, 23170, 18918, 16384, 14654, 13377 };
 
 static volatile int g_breath = 16384, g_drift = 0, g_pitch_semi = 0, g_ratio = 65536, g_xmod = 0;
 static volatile int g_gate = 32767, g_gate_next = 32767;
@@ -274,8 +275,8 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         int st = tri16((int)(s->sub >> 16));
 
         if (growl) {
-            int md = (nstep >> 12) * st;
-            nstep += (int)(((long long)md * growl) >> 12);
+            long long md = (long long)(nstep >> 12) * st;
+            nstep += (int)((md * growl) >> 12);
             if (nstep < 1) nstep = 1;
         }
 
@@ -470,7 +471,7 @@ static void b_block(short *buf)
                     }
                     n = best;
                 }
-                g_pitch_semi = n << 8;
+                g_pitch_semi = n * 256;
             }
             {
                 int n = g_pitch_semi >> 8;
@@ -583,8 +584,8 @@ static void b_block(short *buf)
                 int acc2 = a2 * ic1 + a3 * v3 + e2;
                 int v1 = acc1 >> 12;
                 int v2 = ic2 + (acc2 >> 12);
-                e1 = acc1 - (v1 << 12);
-                e2 = acc2 - ((acc2 >> 12) << 12);
+                e1 = acc1 - v1 * 4096;
+                e2 = acc2 - (acc2 >> 12) * 4096;
                 ic1 = 2 * v1 - ic1;
                 ic2 = 2 * v2 - ic2;
                 if (ic1 > (1 << 18)) ic1 = 1 << 18; else if (ic1 < -(1 << 18)) ic1 = -(1 << 18);
@@ -606,8 +607,8 @@ static void b_block(short *buf)
                 int acc2 = a2 * ic1 + a3 * v3 + e2;
                 int v1 = acc1 >> 12;
                 int v2 = ic2 + (acc2 >> 12);
-                e1 = acc1 - (v1 << 12);
-                e2 = acc2 - ((acc2 >> 12) << 12);
+                e1 = acc1 - v1 * 4096;
+                e2 = acc2 - (acc2 >> 12) * 4096;
                 ic1 = 2 * v1 - ic1;
                 ic2 = 2 * v2 - ic2;
                 if (ic1 > (1 << 18)) ic1 = 1 << 18; else if (ic1 < -(1 << 18)) ic1 = -(1 << 18);
@@ -616,7 +617,7 @@ static void b_block(short *buf)
             }
             dcz += (yo - dcz) >> 9;
             yo -= dcz;
-            hlp += ((yo - hlp) * twc) >> 15;
+            hlp += (int)(((long long)(yo - hlp) * twc) >> 15);
             yo -= hlp;
             if (apg) {
                 int delayed = ap[apw];
@@ -637,7 +638,7 @@ static void b_block(short *buf)
             widx = (widx + 1) & (DMASK - 1);
         }
 
-        room[g_room_sel ^ 1][n] = (short)y;
+        room[g_room_sel ^ 1][n] = (short)clamp16(y);
         env_acc += y < 0 ? -y : y;
 
         {
@@ -651,7 +652,7 @@ static void b_block(short *buf)
     g_drift += ((env_acc - g_drift) >> 4);
     g_gate = g_gate_next;
     g_gate_next = R_gate;
-    g_vgain = (int[]){ 32767, 23170, 18918, 16384, 14654, 13377 }[g_active_seen > 6 ? 6 : (g_active_seen < 1 ? 0 : g_active_seen)];
+    g_vgain = VGAIN[g_active_seen > 6 ? 6 : (g_active_seen < 0 ? 0 : g_active_seen)];
     g_active_seen = 0;
     g_min_step = 0xFFFFFFFFu;
     if (g_strike) g_strike -= g_strike >> 3;
@@ -884,7 +885,7 @@ static void page_t1(void)
     }
 
     opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.3");
+    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.4");
     if (g_msg_timer) {
         opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
         --g_msg_timer;
