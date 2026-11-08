@@ -27,17 +27,18 @@
 #define DMASK 65536u
 #define APLEN 223
 #define MAGIC 0x53414D41u          /* "SAMA" */
-#define DATA_VERSION 1
+#define DATA_VERSION 2
 #define REF_STEP 21426141u         /* A440 at 88.2 kHz, Q32 */
 #define SCENE_N 4
 
-enum { F_NICHE, F_SPACE, F_CROSS, F_MOD, F_CORE, F_MACRO, F_N };
+enum { F_NICHE, F_SPACE, F_CROSS, F_MOD, F_CORE, F_MACRO, F_TUNE, F_N };
 
 struct voice {
     unsigned ph, sub;              /* oscillator and sub phase */
     int dc;                        /* bias/DC blocker state */
     short strike;                  /* note-on transient */
     unsigned seed;                 /* per-voice noise */
+    unsigned char idx;             /* 0..5, for spread */
 };
 
 struct sama_data {
@@ -60,19 +61,20 @@ static volatile int lock_blocks;
 static volatile int face = F_NICHE;
 static short fv[F_N][4] = {
     { 14894, 23168, 30450, 16548 },   /* niche: fold 45, time 70, decay 92, filter 50 */
-    { 11584,  8274, 11584, 23168 },   /* space: tone 35, warp 25, drift 35, blend 70 */
+    { 11584,  8274,  4966, 23168 },   /* space: tone 35, warp 25, drift 15, blend 70 */
     { 11584, 13239,  8274, 14894 },   /* cross: cross 35, polar 40, drive 25, res 45 */
     {  9929,  4966, 14900,  9929 },   /* mod:   rate 30, shape 15, depth 45, dest 30 */
     { 11584, 16384, 11584,  1654 },   /* core:  core 35, bias 50, growl 35, fuzz 5 */
-    { 18203, 14894, 19859, 18203 }    /* macro: 55 45 60 55 */
+    { 18203, 14894, 19859, 18203 },   /* macro: 55 45 60 55 */
+    { 16548,     0,  6619, 29789 }    /* tune:  50 0 20 90 */
 };
 
 /* the four scenes: 6 faces x 4 values, 0..99 */
 static const unsigned char SCENES[SCENE_N][F_N * 4] = {
-    { 35, 55, 92, 60,   40, 15, 15, 55,   20, 40, 15, 30,   45, 15, 30, 30,   40, 50, 20, 10,   50, 50, 50, 50 },
-    { 45, 70, 92, 50,   35, 25, 35, 70,   35, 40, 25, 45,   30, 15, 45, 30,   35, 50, 35,  5,   55, 45, 60, 55 },
-    { 20, 35, 95, 90,   60, 10, 10, 99,  25, 45, 10, 55,   50,  0, 20, 30,   50, 50,  0,  0,   70, 40, 30, 60 },
-    { 75, 60, 95, 45,   25, 60, 50, 85,   70, 25, 60, 70,   55, 75, 80, 75,   80, 40, 70, 40,   40, 80, 80, 75 }
+    { 35, 55, 92, 60,   40, 15, 15, 55,   20, 40, 15, 30,   45, 15, 30, 30,   40, 50, 20, 10,   50, 50, 50, 50,   50,  0,  0, 99 },
+    { 45, 70, 92, 50,   35, 25, 15, 70,   35, 40, 25, 45,   30, 15, 45, 30,   35, 50, 35,  5,   55, 45, 60, 55,   50,  0, 20, 90 },
+    { 20, 35, 95, 90,   60, 10, 10, 99,  25, 45, 10, 55,   50,  0, 20, 30,   50, 50,  0,  0,   70, 40, 30, 60,   50,  0,  0, 99 },
+    { 75, 60, 95, 45,   25, 60, 50, 85,   70, 25, 60, 70,   55, 75, 80, 75,   80, 40, 70, 40,   40, 80, 80, 75,   50,  0,  0, 99 }
 };
 static const char *const SCENE_NAME[SCENE_N] = { "lamp", "choir", "comb", "storm" };
 
@@ -83,6 +85,8 @@ static volatile int R_cross = 35, R_polar = 40, R_drive = 25, R_res = 45;
 static volatile int R_rate = 30, R_shape = 15, R_depth = 45, R_dest = 30;
 static volatile int R_core = 35, R_bias = 50, R_growl = 35, R_fuzz = 5;
 static volatile int R_diffuse = 30, R_wow = 18;
+static volatile int R_tune = 50, R_spread = 0, R_harm = 20, R_air = 90;
+static volatile int g_master = 65536, g_air_state = 0;
 static volatile int R_gate = 32767;
 static const int VGAIN[7] = { 32767, 32767, 23170, 18918, 16384, 14654, 13377 };
 
@@ -97,7 +101,7 @@ static volatile int g_scene = 0, g_msg_timer = 0;
 static char g_msg[12];
 static int g_scale = 0, g_tune = 0, g_wow = 18, g_keytrack = 70, g_diffuse = 30;
 
-static int k99(short v) { return v < 0 ? 0 : (v * 99 + 16383) / 32767; }
+static int k99(short v) { if (v < 0) return 0; int n = v * 99 + 16383; return (n + (n >> 15) + 1) >> 15; }
 static int cl99(int v) { return v < 0 ? 0 : v > 99 ? 99 : v; }
 static int clamp16(int v) { return v < -32768 ? -32768 : v > 32767 ? 32767 : v; }
 
@@ -198,6 +202,7 @@ static void v_init(void *v, int index)
     s->dc = 0;
     s->strike = 0;
     s->seed = 0x9E3779B9u * (unsigned)(index + 1);
+    s->idx = (unsigned char)index;
     if (index == 0) {
         /* init can run in the audio interrupt; opus_engine_data is not audio-safe.
          * e_on_block loads the sound's face data in the sequencer thread. */
@@ -240,8 +245,13 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     struct voice *s = v;
     (void)par;
     int fold = R_fold, core = R_core, bias = R_bias, growl = R_growl, fuzz = R_fuzz;
-    int drift = (g_drift * R_drift) / 300;
+    int drift = g_tune ? 0 : (g_drift * R_drift) / 300;
     int ratio = g_ratio;
+    ratio = (int)(((long long)ratio * g_master) >> 16);
+    if (R_spread && g_active > 1) {
+        int c = ((int)s->idx * 2 - 5) * R_spread * 2 / 99;
+        ratio = (int)(((long long)ratio * (65536 + c * 38)) >> 16);
+    }
     int gate0 = g_gate, gate1 = g_gate_next;
     int vg = g_vgain;
     int fbd = g_fbd, fbd2 = g_fbd2;
@@ -254,7 +264,7 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     if (fold_amt < 0) fold_amt = 0; else if (fold_amt > 32767) fold_amt = 32767;
     int gq8 = 256 + (fold_amt * 1792) / 32767;    /* x256: 1 .. 8 folds */
     int drive = 32768 + fuzz * 660;
-    int width = 12000 + bias * 210;
+    int width = 12000 + bias * 210 + g_drift * 2;
     int bias_dc = (bias - 50) * 120;
 
     if (pitch[0] < g_min_step) g_min_step = pitch[0];
@@ -316,9 +326,10 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         int pos = core * 3;
         int ci = pos / 99;
         int cf = pos - ci * 99;
+        int cfq = (cf * 32768) / 99;
         int a = core_shape(ci, ph, width, dt_base);
         int b = core_shape(ci < 3 ? ci + 1 : 3, ph, width, dt_base);
-        int x = a + ((b - a) * cf) / 99;
+        int x = a + (((b - a) * cfq) >> 15);
 
         if (strike) {
             s->seed = s->seed * 1664525u + 1013904223u;
@@ -361,7 +372,6 @@ static void b_block(short *buf)
     short par[8];
     if (!opus_engine_knobs(par)) return;
     if (lock_blocks) --lock_blocks;
-    else for (int i = 0; i < 4; ++i) fv[face][i] = par[i];
 
     if (!line) return;
 
@@ -391,6 +401,10 @@ static void b_block(short *buf)
     int pressure = k99(fv[F_MACRO][1]) - 50;
     int motion = k99(fv[F_MACRO][2]) - 50;
     int space = k99(fv[F_MACRO][3]) - 50;
+    int tune = k99(fv[F_TUNE][0]);
+    int spread = k99(fv[F_TUNE][1]);
+    int harm = k99(fv[F_TUNE][2]);
+    int air = k99(fv[F_TUNE][3]);
 
     /* the performance macros are offsets on the deep values, neutral at 50 */
     filter = cl99(filter + (body * 6) / 10);
@@ -405,7 +419,7 @@ static void b_block(short *buf)
     depth = cl99(depth + (motion * 7) / 10);
     rate = cl99(rate + (motion * 4) / 10);
     warp = cl99(warp + (motion * 5) / 10);
-    drift = cl99(drift + (motion * 5) / 10);
+    drift = cl99(drift + (motion * 2) / 10);
     cross = cl99(cross + (space * 2) / 10);
     tone = cl99(tone + (space * 2) / 10);
     blend += ((space * 32767) / 99) * 7 / 10;
@@ -419,14 +433,16 @@ static void b_block(short *buf)
     }
 
     R_fold = fold; R_time = time; R_decay = decay; R_filter = filter;
-    R_tone = tone; R_warp = warp; R_drift = drift; R_blend = blend;
+    R_tone = tone; R_warp = warp; R_drift = (drift * drift) / 99; R_blend = blend;
     R_cross = cross; R_polar = polar; R_drive = drive; R_res = res;
     R_rate = rate; R_shape = shape; R_depth = depth; R_dest = dest;
     R_core = core; R_bias = bias; R_growl = growl; R_fuzz = fuzz;
     R_diffuse = r_diffuse; R_wow = r_wow;
+    R_tune = tune; R_spread = spread; R_harm = harm; R_air = air;
+    g_master = 65536 + (tune - 50) * 76;
 
     if (g_min_step != 0xFFFFFFFFu) g_root_step = (int)g_min_step;
-    int root = g_root_step;
+    int root = (int)(((long long)g_root_step * g_master) >> 16);
     if (root < 1) root = REF_STEP;
 
     int fi = filter;
@@ -558,7 +574,7 @@ static void b_block(short *buf)
             if (!g_tune && wowd) {
                 g_wowph += 48696;
                 int ws = SINTAB[(g_wowph >> 24) & 255];
-                w += ((((tbase >> 8) * ws) >> 7) * wowd) / 19800;
+                w += ((((tbase >> 8) * ws) >> 7) * ((wowd * 32768) / 19800)) >> 15;
             }
             tnow = tbase + w;
             if (tnow < 32 * 256) tnow = 32 * 256;
@@ -650,6 +666,19 @@ static void b_block(short *buf)
 
         {
             int o = src + (((yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
+            if (R_harm) {
+                int hp = (int)(subph >> 16);
+                int h2 = SINTAB[((hp * 4) >> 8) & 255];
+                int h3 = SINTAB[((hp * 6) >> 8) & 255];
+                int hg = (R_harm * R_harm * g_drift) / (99 * 99 * 2);
+                if (hg > 6000) hg = 6000;
+                o += ((h2 * hg) >> 15) + ((h3 * hg) >> 16);
+            }
+            if (R_air < 96) {
+                int w = 200 + R_air * 340;
+                g_air_state += ((o - g_air_state) * w) >> 15;
+                o = g_air_state;
+            }
             buf[n] = (short)softx(o, 4096, 32767, 0);
         }
     }
@@ -673,18 +702,19 @@ static const char *const LAB[F_N][4] = {
     { "cross", "polar", "drive", "res" },
     { "rate", "shape", "depth", "dest" },
     { "core", "bias", "growl", "fuzz" },
-    { "body", "pressure", "motion", "space" }
+    { "body", "pressure", "motion", "space" },
+    { "tune", "spread", "harm", "air" }
 };
-static const char *const FACE_NAME[F_N] = { "niche", "space", "cross", "mod", "core", "macro" };
+static const char *const FACE_NAME[F_N] = { "niche", "space", "cross", "mod", "core", "macro", "tune" };
 
 #define C_GOLD   OPUS_RGB(0xd9b45e)
-#define C_GOLD_D OPUS_RGB(0x6b5a33)
+#define C_GOLD_D OPUS_RGB(0x8a7440)
 #define C_GOLD_L OPUS_RGB(0xf0d79a)
 #define C_IVORY  OPUS_RGB(0xefe6d2)
 #define C_TURQ   OPUS_RGB(0x3fa3a0)
 #define C_LAPIS  OPUS_RGB(0x101b3c)
 #define C_NIGHT  OPUS_RGB(0x0a1024)
-#define C_DIM    OPUS_RGB(0x2a3350)
+#define C_DIM    OPUS_RGB(0x5a6280)
 
 static void ln_c(int x0, int y0, int x1, int y1, int w, unsigned c)
 {
@@ -698,35 +728,30 @@ static void polyline_c(const short (*p)[2], int n, unsigned c)
 
 static void ring_at(const short (*p)[2], int n, int cx, int cy, int sc, unsigned c)
 {
-    int px = cx + p[0][0] * sc / 1000, py = cy + p[0][1] * sc / 1000;
+    int scq = (sc * 32768) / 1000;
+    int px = cx + ((p[0][0] * scq) >> 15), py = cy + ((p[0][1] * scq) >> 15);
     for (int i = 1; i < n; ++i) {
-        int x = cx + p[i][0] * sc / 1000, y = cy + p[i][1] * sc / 1000;
+        int x = cx + ((p[i][0] * scq) >> 15), y = cy + ((p[i][1] * scq) >> 15);
         ln_c(px, py, x, y, 256, c);
         px = x; py = y;
     }
-    ln_c(px, py, cx + p[0][0] * sc / 1000, cy + p[0][1] * sc / 1000, 256, c);
-}
-
-static void bg_fill(unsigned rgb)
-{
-    opus_page_path();
-    opus_page_move(0, 0);
-    opus_page_line_to(320 * 256, 0);
-    opus_page_line_to(320 * 256, 160 * 256);
-    opus_page_line_to(0, 160 * 256);
-    opus_page_close();
-    opus_page_fill_path(rgb, 255);
+    ln_c(px, py, cx + ((p[0][0] * scq) >> 15), cy + ((p[0][1] * scq) >> 15), 256, c);
 }
 
 static void usec(char *b, unsigned n, int v) { fw_snprintf(b, n, "%d", v); }
 
-static void footer(int f, const int v[4])
+static void footer_static(int f)
+{
+    for (int i = 0; i < 4; ++i)
+        opus_page_text(me, i, i * 80 + 11, 129, 7, OPUS_COLOR_DIM, LAB[f][i]);
+}
+
+static void footer_live(int f, const int v[4])
 {
     char b[4][6];
-    opus_page_fill(0, 126, 319, 159, OPUS_COLOR_BACK);
+    (void)f;
     for (int i = 0; i < 4; ++i) {
         usec(b[i], sizeof b[i], v[i]);
-        opus_page_text(me, i, i * 80 + 11, 129, 7, OPUS_COLOR_DIM, LAB[f][i]);
         opus_page_text_right(me, 4 + i, i * 80 + 72, 128, 9, OPUS_COLOR_E(i), b[i]);
         opus_page_fill(i * 80 + 6, 132, i * 80 + 8, 134, OPUS_COLOR_E(i));
         opus_page_fill(i * 80 + 6, 140, i * 80 + 72, 141, OPUS_COLOR_OFF);
@@ -737,8 +762,8 @@ static void footer(int f, const int v[4])
 
 static void draw_niche(int decay, int filt)
 {
-    int fh = 18 + decay * 12 / 99;
-    int rays = 20 + filt * 16 / 99;
+    int fh = 18 + decay * 12 / 99 + g_drift * 8 / 32768;
+    int rays = 20 + filt * 16 / 99 + g_strike * 6 / 32768;
     for (int y = 14; y < 68; y += 5) ln_c(160, y, 160, y + 2, 256, C_GOLD_D);
     for (int i = 0; i < 15; ++i) {
         int x0 = 160 + RAYS[i][0] * 16 / 1000, y0 = 66 + RAYS[i][1] * 16 / 1000;
@@ -754,7 +779,7 @@ static void draw_niche(int decay, int filt)
 
 static void draw_cross(int cross, int polar, int drive, int res)
 {
-    int r = 34 + cross * 12 / 99;
+    int r = 34 + cross * 12 / 99 + g_drift * 4 / 32768;
     ring_at(RING48, 48, 160, 62, r, C_GOLD);
     ring_at(RING48, 48, 160, 62, r - 6, C_GOLD_D);
     int q = 1 + res * 6 / 99;
@@ -783,7 +808,7 @@ static void draw_cross(int cross, int polar, int drive, int res)
 
 static void draw_mod(int rate, int shape, int depth, int dest)
 {
-    int amp = 10 + depth * 22 / 99;
+    int amp = 10 + depth * 22 / 99 + g_drift * 6 / 32768;
     int prev = 0, prev_x = 0;
     for (int i = 0; i <= 120; ++i) {
         int bh = (i * 65536 / 120) & 0xFFFF;
@@ -807,7 +832,7 @@ static void draw_mod(int rate, int shape, int depth, int dest)
 
 static void draw_core(int core, int bias, int growl, int fuzz)
 {
-    int width = 12000 + bias * 210;
+    int width = 12000 + bias * 210 + g_drift * 2;
     int pos = core * 3;
     int ci = pos / 99;
     int cf = pos - ci * 99;
@@ -828,17 +853,92 @@ static void draw_core(int core, int bias, int growl, int fuzz)
     ln_c(30, 66, 288, 66, 256, C_DIM);
 }
 
+static void draw_tune(int tune, int spread, int harm, int air)
+{
+    int cy = 62;
+    ln_c(40, cy, 280, cy, 256, C_DIM);
+    for (int i = 0; i <= 20; ++i) {
+        int x = 60 + i * 10;
+        int h = (i % 5 == 0) ? 8 : 4;
+        ln_c(x, cy - h, x, cy + h, 256, (i == 10) ? C_GOLD_L : C_GOLD_D);
+    }
+    int nx = 60 + (tune * 200) / 99 + g_drift * 4 / 32768;
+    ln_c(nx, cy - 30, nx, cy + 30, 512, C_GOLD);
+    opus_page_dot(nx, cy, 3, 1, C_IVORY);
+    for (int i = 0; i < 6; ++i)
+        opus_page_dot(160 + (i - 2) * (5 + spread * 2 / 99), 100, 2, 1, i < 3 ? C_TURQ : C_GOLD_D);
+    ln_c(60, 120, 60 + 10 + harm * 30 / 99, 120, 512, C_TURQ);
+    ln_c(60, 128, 60 + 8 + harm * 18 / 99, 128, 512, C_GOLD_D);
+    ln_c(200, 128, 200 + air * 80 / 99, 120, 256, C_TURQ);
+}
+
 static void draw_macro(const int v[4])
 {
     for (int i = 0; i < 4; ++i) {
         int cx = 60 + i * 68;
-        int len = (v[i] - 50) * 40 / 50;
+        int len = (v[i] - 50) * 40 / 50 + g_drift * 2 / 32768;
         ln_c(cx, 50, cx, 90, 256, C_DIM);
         ln_c(cx - 5, 70, cx + 5, 70, 256, C_GOLD_D);
         ln_c(cx, 70, cx, 70 - len, 256, C_GOLD);
         opus_page_dot(cx, 70 - len, 2, 1, C_GOLD_L);
         opus_page_text(me, 16 + i, cx - 10, 112, 6, OPUS_COLOR_DIM, LAB[F_MACRO][i]);
     }
+}
+
+static void static_cross(void)
+{
+    ring_at(RING48, 48, 160, 62, 46, C_GOLD);
+    ring_at(RING48, 48, 160, 62, 39, C_GOLD_D);
+    ring_at(RING48, 48, 160, 62, 52, C_DIM);
+    ln_c(140, 112, 180, 112, 256, C_GOLD_D);
+}
+
+static void static_mod(void)
+{
+    ln_c(100, 24, 220, 24, 256, C_GOLD);
+    ln_c(160, 24, 160, 30, 256, C_GOLD_D);
+    for (int i = 0; i < 13; ++i) {
+        int a = 30 + i * 10;
+        int x0 = 160, y0 = 28;
+        int x1 = 160 + (a - 90) * 10 / 10;
+        int y1 = 28 + 40 + (a > 90 ? (a - 90) / 3 : (90 - a) / 3);
+        ln_c(x0, y0, x1, y1, 256, (i % 3 == 0) ? C_GOLD : C_GOLD_D);
+    }
+    for (int i = 0; i < 4; ++i) opus_page_dot(104 + i * 36, 104, 3, 0, C_GOLD_D);
+}
+
+static void static_core(void)
+{
+    for (int i = 0; i < 3; ++i) ln_c(30, 46 + i * 20, 290, 46 + i * 20, 256, C_DIM);
+    for (int i = 0; i < 4; ++i) ln_c(30 + i * 86, 30, 30 + i * 86, 102, 256, C_DIM);
+    for (int i = 0; i < 8; ++i) ln_c(44 + i * 32, 101, 44 + i * 32, 106, 256, C_GOLD_D);
+}
+
+static void static_macro(void)
+{
+    ln_c(34, 28, 286, 28, 256, C_GOLD);
+    for (int i = 0; i < 4; ++i) {
+        int cx = 70 + i * 60;
+        ln_c(cx, 28, cx, 66, 256, C_GOLD_D);
+        opus_page_dot(cx, 66, 2, 0, C_GOLD_D);
+    }
+    ln_c(30, 114, 290, 114, 256, C_GOLD_D);
+}
+
+static void static_tune(void)
+{
+    ln_c(40, 62, 280, 62, 256, C_DIM);
+    for (int i = 0; i <= 20; ++i) {
+        int x = 60 + i * 10;
+        int h = (i % 5 == 0) ? 8 : 4;
+        ln_c(x, 62 - h, x, 62 + h, 256, (i == 10) ? C_GOLD_L : C_GOLD_D);
+    }
+    ln_c(200, 128, 200, 120, 256, C_TURQ);
+}
+
+static unsigned pg_still_key(void)
+{
+    return (unsigned)face ^ (g_freeze ? 0x100u : 0) ^ ((unsigned)g_scene << 9);
 }
 
 static void page_t1(void)
@@ -848,19 +948,45 @@ static void page_t1(void)
     int v[4];
     for (int i = 0; i < 4; ++i) v[i] = k99(fv[f][i]);
 
-    bg_fill(C_LAPIS);
-    ln_c(2, 3, 317, 3, 256, C_GOLD_D);
-    ring_at(STAR8, 16, 7, 9, 3, C_GOLD_D);
-    ring_at(STAR8, 16, 313, 9, 3, C_GOLD_D);
+    if (!opus_page_still(me, pg_still_key())) {
+        ln_c(2, 3, 317, 3, 256, C_GOLD_D);
+        ring_at(STAR8, 16, 7, 9, 3, C_GOLD_D);
+        ring_at(STAR8, 16, 313, 9, 3, C_GOLD_D);
+        opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
+        opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.1");
+        footer_static(f);
+        for (int i = 0; i < 4; ++i) {
+            int on = i == g_scene;
+            opus_page_dot(66 + i * 8, 8, 2, on, on ? C_GOLD_L : C_GOLD_D);
+        }
+        if (f == F_NICHE) {
+            polyline_c(ARCH_OUT, 50, C_GOLD);
+            polyline_c(ARCH_IN, 50, C_GOLD_D);
+            ln_c(82, 117, 238, 117, 256, C_GOLD_D);
+            ln_c(82, 118, 238, 118, 256, C_DIM);
+            ring_at(STAR8, 16, 77, 33, 4, C_GOLD_D);
+            ring_at(STAR8, 16, 243, 33, 4, C_GOLD_D);
+            polyline_c(BOWL, 25, C_TURQ);
+        } else if (f == F_SPACE) {
+            ring_at(RING48, 48, 160, 62, 58, C_DIM);
+            ring_at(RING48, 48, 160, 62, 47, C_DIM);
+            ring_at(SQ4, 5, 160, 62, 24, C_GOLD);
+            ring_at(OCT8, 9, 160, 62, 10, C_GOLD_D);
+        } else if (f == F_CROSS) {
+            static_cross();
+        } else if (f == F_MOD) {
+            static_mod();
+        } else if (f == F_CORE) {
+            static_core();
+        } else if (f == F_TUNE) {
+            static_tune();
+        } else if (f == F_MACRO) {
+            static_macro();
+        }
+        opus_page_still_done(me);
+    }
 
     if (f == F_NICHE) {
-        polyline_c(ARCH_OUT, 50, C_GOLD);
-        polyline_c(ARCH_IN, 50, C_GOLD_D);
-        ln_c(82, 117, 238, 117, 256, C_GOLD_D);
-        ln_c(82, 118, 238, 118, 256, C_DIM);
-        ring_at(STAR8, 16, 77, 33, 4, C_GOLD_D);
-        ring_at(STAR8, 16, 243, 33, 4, C_GOLD_D);
-        polyline_c(BOWL, 25, C_TURQ);
         draw_niche(v[2], v[3]);
         if (g_tune && g_tuned_k) {
             char tb[8];
@@ -868,15 +994,11 @@ static void page_t1(void)
             opus_page_text(me, 21, 224, 22, 7, C_GOLD_L, tb);
         }
     } else if (f == F_SPACE) {
-        ring_at(RING48, 48, 160, 62, 58, C_DIM);
-        ring_at(RING48, 48, 160, 62, 47, C_DIM);
-        ring_at(SQ4, 5, 160, 62, 24, C_GOLD);
         for (int i = 0; i < 4; ++i) {
             int a = i * 12, b2 = ((i + 1) & 3) * 12;
             ln_c(160 + RING48[a][0] * 34 / 1000, 62 + RING48[a][1] * 34 / 1000,
                  160 + RING48[b2][0] * 34 / 1000, 62 + RING48[b2][1] * 34 / 1000, 256, C_GOLD_D);
         }
-        ring_at(OCT8, 9, 160, 62, 10, C_GOLD_D);
         {
             int head = (g_n * 3) & 47;
             opus_page_dot(160 + RING48[head][0] * 58 / 1000, 62 + RING48[head][1] * 58 / 1000, 1, 1, C_GOLD_L);
@@ -887,17 +1009,25 @@ static void page_t1(void)
         draw_mod(v[0], v[1], v[2], v[3]);
     } else if (f == F_CORE) {
         draw_core(v[0], v[1], v[2], v[3]);
+    } else if (f == F_TUNE) {
+        draw_tune(v[0], v[1], v[2], v[3]);
     } else {
         draw_macro(v);
     }
 
-    opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-    opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.6");
+    for (int i = 0; i < g_active && i < 6; ++i)
+        opus_page_fill(306, 22 + i * 5, 310, 25 + i * 5, C_IVORY);
+    if (g_strike > 6000) ln_c(2, 3, 317, 3, 512, C_GOLD_L);
+    {
+        int fx = 6 + R_filter * 300 / 99;
+        ln_c(6, 112, 313, 112, 256, C_DIM);
+        ln_c(6, 112, fx, 112, 384, C_GOLD_D);
+    }
+    footer_live(f, v);
     if (g_msg_timer) {
         opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
         --g_msg_timer;
     }
-    footer(f, v);
 }
 
 /* ---------------------------------------------------------------- the controls */
@@ -925,9 +1055,6 @@ static void save_data(void)
 static void set_face(int f)
 {
     if (f == face) return;
-    short par[8];
-    if (opus_engine_knobs(par))
-        for (int i = 0; i < 4; ++i) fv[face][i] = par[i];
     face = (f + F_N) % F_N;
     save_data();
     lock_blocks = 6;
@@ -965,16 +1092,29 @@ static int e_key(int key, int pressed, int page)
         }
         return 0;                              /* plain T1 is the OS page key */
     }
-    if (key == 0x08) { set_face(face - 1); return 1; }     /* T3: previous face on T1 */
+    if (key == 0x08) {
+        if (opus_fn_held()) {
+            g_tune = !g_tune;
+            opus_set_setting(me, "tune", g_tune);
+            set_msg(g_tune ? "tuned" : "free");
+            return 1;
+        }
+        set_face(face - 1);                                /* T3: previous face on T1 */
+        return 1;
+    }
     if (key == 0x09) return 0;                              /* T4: the system's LFO page */
-    if (key >= 0x3B && key <= 0x3E) { set_face(key - 0x3B); return 1; }
+    if (key >= 0x3B && key <= 0x3E) { set_face(key == 0x3E ? F_CORE : key - 0x3B); return 1; }
     return 0;
 }
 
 static int e_turn(int encoder, int detents, int page)
 {
-    (void)encoder; (void)detents; (void)page;
-    return 0;
+    if (page == 0 && encoder >= 0 && encoder < 4 && detents) {
+        int v = k99(fv[face][encoder]) + detents;
+        if (v < 0) v = 0; else if (v > 99) v = 99;
+        fv[face][encoder] = (short)(v * 32767 / 99);
+    }
+    return 0;                                  /* the OS still owns the knob */
 }
 
 static void e_setting(const char *name, int value)
@@ -1007,15 +1147,25 @@ static void e_on_block(void)
     g_load_pending = 0;
     struct sama_data d;
     int n = opus_engine_data(&d, sizeof d);
+    int ok = 0;
     if (n == (int)sizeof d && d.magic == MAGIC && d.version == DATA_VERSION &&
         d.face >= 0 && d.face < F_N) {
         face = d.face;
         for (int f = 0; f < F_N; ++f)
             for (int i = 0; i < 4; ++i)
                 fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
-    } else {
-        face = F_NICHE;
+        ok = 1;
+    } else if (n == 60 && d.magic == MAGIC && d.version == 1 &&
+               d.face >= 0 && d.face < 6) {
+        face = d.face;
+        for (int f = 0; f < 6; ++f)
+            for (int i = 0; i < 4; ++i)
+                fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
+        /* v1 sounds had no tune face: neutral there, not the fresh defaults */
+        fv[F_TUNE][0] = 16548; fv[F_TUNE][1] = 0; fv[F_TUNE][2] = 0; fv[F_TUNE][3] = 32767;
+        ok = 1;
     }
+    if (!ok) face = F_NICHE;
 }
 
 int opl_init(struct opl_self *self)

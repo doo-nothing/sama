@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.1
+
+- the page now uses the core **still cache**, a **black field**, the scene/voice/filter chassis,
+  and sound-reactive live layers on every face (room envelope, strike flash, values, motion).
+- all seven faces have static art (niche shrine, space orrery, cross gyroscope, mod metronome,
+  core scope/ruler, macro mobile, tune strobe).
+- the regression oracle now measures the **spectral peak** near the played note instead of
+  autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
+
+## 1.1.0
+
+- **seventh face `tune`**: master tune (±100 cents), per-voice spread, post-room 2f/3f
+  harmonics, master air lowpass. **FN + T3** toggles the tuned room.
+- **tuning fixed**: drift is gated in tune mode, square-law drift + halved motion offset +
+  default 15; free mode is −19 cents (was −62), tune mode is 440.0.
+- **data v2** (68 bytes) with a v1 (60-byte) migration: old sounds keep their 24 values and get
+  neutral tune values.
+- **CPU**: hoisted the voice-morph `/99`, the wow division, `k99`, and `ring_at`; the 64-bit
+  hot-path multiplies are gone.
+- **art**: black field, contrast-corrected palette, still cache, scene dots, filter horizon,
+  voice lamps.
+- orange push now jumps to **core**; the saved face values are no longer baked from LFO-live
+  knobs on a face change.
+
 ## 1.0.6
 
 - **fixed: 1.0.5 added a 128-byte stack array (`short in[64]`) to the audio-interrupt block.**

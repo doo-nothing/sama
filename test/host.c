@@ -82,6 +82,7 @@ int opus_setting(struct opl_self *s, const char *n)
     return 0;
 }
 void opus_on_setting(struct opl_self *s, void (*fn)(const char *, int)) { (void)s; (void)fn; }
+int opus_set_setting(struct opl_self *s, const char *n, int v) { (void)s; (void)n; (void)v; return 1; }
 void opus_on_block(struct opl_self *s, void (*fn)(void)) { (void)s; (void)fn; }
 int fw_snprintf(char *d, unsigned n, const char *f, ...)
 {

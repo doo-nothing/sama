@@ -23,6 +23,7 @@ import subprocess
 import sys
 
 import numpy as np
+import math
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.environ.get("OPUS_KIT", "")
@@ -131,7 +132,11 @@ def main():
     check("drone tail", base["rms5"] >= 0.01 * base["rms1"],
           "rms5=%.0f rms1=%.0f" % (base["rms5"], base["rms1"]))
     check("no core clipping", base["clip"] == 0, "clip=%.0f" % base["clip"])
-    check("in tune-ish", 0.9 <= bm["f0"] / 440.0 <= 1.1, "f0=%.1f Hz" % bm["f0"])
+    fq, mg = spectrum(base["_wav"])
+    sp, _ = peak_in(fq, mg, 380, 520)
+    check("default in tune (spectral)",
+          380 <= sp <= 520 and abs(1200 * math.log2(sp / 440.0)) <= 30,
+          "peak=%.1f Hz (%.0f cents)" % (sp, 1200 * math.log2(sp / 440.0)))
 
     print("\ngain / headroom:")
     tri = run(CLEAN, NEUTRAL, "tri")

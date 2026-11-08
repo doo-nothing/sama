@@ -108,6 +108,9 @@ lowest note), **wow** (tape wobble), **keytrack** (the room filter follows the n
 
 ## Pages and faces
 
+The instrument now has **seven faces**; the new **tune** face holds the tune/detune,
+harmonics and air controls. **FN + T3** toggles the tuned room.
+
 **T2 and T4 stay the system's pages** (envelope, LFO). Every sama control lives on **T1**, where
 encoder turns are actually delivered: the four knobs are the OS's own, and a *face* decides what
 they mean. **T3** pages to the previous face; **T4** stays the system's LFO page. The four encoder pushes

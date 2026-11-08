@@ -21,6 +21,7 @@ int opus_engine_data_set(const void *b, int n) { (void)b; (void)n; return 0; }
 int opus_engine_knob_set(int k, int v) { (void)k; (void)v; return 1; }
 int opus_setting(struct opl_self *s, const char *n) { (void)s; (void)n; return 0; }
 void opus_on_setting(struct opl_self *s, void (*fn)(const char *, int)) { (void)s; (void)fn; }
+int opus_set_setting(struct opl_self *s, const char *n, int v) { (void)s; (void)n; (void)v; return 1; }
 void opus_on_block(struct opl_self *s, void (*fn)(void)) { (void)s; (void)fn; }
 #include <stdarg.h>
 int fw_snprintf(char *d, unsigned n, const char *f, ...) { va_list ap; va_start(ap, f); int r = vsnprintf(d, n, f, ap); va_end(ap); return r; }
