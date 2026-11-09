@@ -210,6 +210,28 @@ def main():
     per = run(BASE, dict(BASE_ENV, SAMA_PERSIST="1"), "persist")
     check("faces persist", per.get("persist") == 1, "persist=%s" % per.get("persist"))
 
+    st = run(BASE, dict(BASE_ENV, SAMA_STATE="1"), "state")
+    check("state: init face/scene", st.get("st_init_face") == 0 and st.get("st_init_scene") == 1,
+          "face=%s scene=%s" % (st.get("st_init_face"), st.get("st_init_scene")))
+    check("state: init live shadow synced", st.get("st_init_sync") == 1, "sync=%s" % st.get("st_init_sync"))
+    check("state: face switch keeps live in sync", st.get("st_face_face") == 2 and st.get("st_face_sync") == 1,
+          "face=%s sync=%s" % (st.get("st_face_face"), st.get("st_face_sync")))
+    check("state: a turn writes stored and live", st.get("st_turn_fv") == st.get("st_turn_fvl"),
+          "fv=%s fvl=%s" % (st.get("st_turn_fv"), st.get("st_turn_fvl")))
+    check("state: scene loads all 28 and syncs", st.get("st_scene_scene") == 3 and st.get("st_scene_sync") == 1,
+          "scene=%s sync=%s" % (st.get("st_scene_scene"), st.get("st_scene_sync")))
+    check("state: reload restores face/scene/values",
+          st.get("st_reload_face") == 2 and st.get("st_reload_scene") == 3 and
+          st.get("st_reload_v0") == st.get("st_scene_v0"),
+          "face=%s scene=%s v0=%s want=%s" % (st.get("st_reload_face"), st.get("st_reload_scene"),
+                                              st.get("st_reload_v0"), st.get("st_scene_v0")))
+    check("state: reload syncs live shadow", st.get("st_reload_sync") == 1, "sync=%s" % st.get("st_reload_sync"))
+    check("state: new sound resets to defaults",
+          st.get("st_new_face") == 0 and st.get("st_new_scene") == 1 and
+          st.get("st_new_v0") == 45 and st.get("st_new_sync") == 1,
+          "face=%s scene=%s v0=%s sync=%s" % (st.get("st_new_face"), st.get("st_new_scene"),
+                                              st.get("st_new_v0"), st.get("st_new_sync")))
+
     kt = run(BASE, dict(BASE_ENV, SAMA_KEYTEST="1"), "keytest")
     check("T4 on T2 passes to the OS", kt.get("keypage_t2") == 0,
           "keypage_t2=%s" % kt.get("keypage_t2"))

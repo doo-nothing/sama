@@ -175,6 +175,52 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (env_int("SAMA_STATE", 0)) {
+        int sync = 1;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) sync = 0;
+        printf("st_init_face %d\nst_init_scene %d\nst_init_sync %d\n", face, g_scene, sync);
+
+        set_face(F_CROSS);
+        int fsync = 1;
+        for (int i = 0; i < 4; ++i) if (fvl[F_CROSS][i] != fv[F_CROSS][i]) fsync = 0;
+        printf("st_face_face %d\nst_face_sync %d\n", face, fsync);
+
+        e_turn(0, 7, 0);
+        printf("st_turn_fv %d\nst_turn_fvl %d\n", k99(fv[F_CROSS][0]), k99(fvl[F_CROSS][0]));
+
+        load_scene(3);
+        int ssync = 1;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) ssync = 0;
+        printf("st_scene_scene %d\nst_scene_sync %d\nst_scene_v0 %d\n", g_scene, ssync, k99(fv[F_CROSS][0]));
+
+        save_data();
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) fv[f][i] = 0;
+        face = F_NICHE; g_scene = 0;
+        v_init(VO[0], 0);
+        e_on_block();
+        int rsync = 1;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) rsync = 0;
+        printf("st_reload_face %d\nst_reload_scene %d\nst_reload_v0 %d\nst_reload_sync %d\n",
+               face, g_scene, k99(fv[F_CROSS][0]), rsync);
+
+        DATA_N = 0;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) fv[f][i] = 9999;
+        face = F_CROSS; g_scene = 3;
+        v_init(VO[0], 0);
+        e_on_block();
+        int nsync = 1;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) nsync = 0;
+        printf("st_new_face %d\nst_new_scene %d\nst_new_v0 %d\nst_new_sync %d\n",
+               face, g_scene, k99(fv[F_NICHE][0]), nsync);
+        return 0;
+    }
+
     int nv = env_int("SAMA_VOICES", 1);
     if (nv < 1) nv = 1; else if (nv > 6) nv = 6;
 

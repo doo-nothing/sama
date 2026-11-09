@@ -9,6 +9,19 @@
 - the regression oracle now measures the **spectral peak** near the played note instead of
   autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
 
+## 1.1.6
+
+- **state machines made explicit** (`docs/STATE.md`): sound load, data format, face,
+  knobs (stored/live), scene, tune, freeze, page/still, settings, release. The host
+  `SAMA_STATE=1` runs the transitions and the regression asserts them.
+- **scene persists** in the two former tail-padding bytes of the 68-byte v2 struct.
+  Old v2 sounds read scene 0; the size and version are unchanged, so nothing breaks.
+- **face switch race fixed**: `lock_blocks` is set before `face`/`save_data` and the
+  save happens after the OS knobs are written. `load_scene` locks before rewriting.
+- **still key = face only**; scene dots draw live. Freeze/scene no longer force a full
+  static redraw, and the page captures `face` once for both the key and the art.
+- page revision v1.9.
+
 ## 1.1.5
 
 - **fixed: saved sounds played the factory defaults on every non-active face.** `e_on_block`

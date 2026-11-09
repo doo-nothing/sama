@@ -45,6 +45,7 @@ struct sama_data {
     unsigned magic, version;
     short face;
     short v[F_N * 4];              /* 0..99 */
+    short scene;                   /* was tail padding; v2-compatible */
 };
 
 static struct opl_self *me;
@@ -97,7 +98,9 @@ static volatile int g_root_step = REF_STEP;
 static volatile unsigned g_min_step = 0xFFFFFFFFu;
 static volatile int g_strike = 0, g_vgain = 32767, g_active = 0;
 static volatile int g_fbd = 0, g_fbd2 = 0, g_fbdc = 0;
-static volatile int g_freeze = 0, g_tuned_k = 0, g_load_pending = 0;
+static volatile int g_freeze = 0, g_tuned_k = 0, g_load_state = 0;
+#define LOAD_IDLE 0
+#define LOAD_PENDING 1
 static volatile int g_scene = 0, g_msg_timer = 0;
 static char g_msg[12];
 static int g_scale = 0, g_tune = 0, g_wow = 18, g_keytrack = 70, g_diffuse = 30;
@@ -207,7 +210,7 @@ static void v_init(void *v, int index)
     if (index == 0) {
         /* init can run in the audio interrupt; opus_engine_data is not audio-safe.
          * e_on_block loads the sound's face data in the sequencer thread. */
-        g_load_pending = 1;
+        g_load_state = LOAD_PENDING;
         face = F_NICHE;
         g_active = 0;
         for (int f = 0; f < F_N; ++f)
@@ -946,30 +949,26 @@ static void static_tune(void)
     ln_c(200, 128, 200, 120, 256, C_TURQ);
 }
 
-static unsigned pg_still_key(int f, int sc, int fr)
+static unsigned pg_still_key(int f)
 {
-    return (unsigned)f ^ (fr ? 0x100u : 0) ^ ((unsigned)sc << 9);
+    return (unsigned)f;                     /* face-only: scene dots are live */
 }
 
 static void page_t1(void)
 {
     int f = face;
-    int sc = g_scene, fr = g_freeze;
+    int sc = g_scene;
     ++g_n;
     int v[4];
     for (int i = 0; i < 4; ++i) v[i] = k99(fv[f][i]);
 
-    if (!opus_page_still(me, pg_still_key(f, sc, fr))) {
+    if (!opus_page_still(me, pg_still_key(f))) {
         ln_c(2, 3, 317, 3, 256, C_GOLD_D);
         ring_at(STAR8, 16, 7, 9, 3, C_GOLD_D);
         ring_at(STAR8, 16, 313, 9, 3, C_GOLD_D);
         opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-        opus_page_text(me, 14, 286, 10, 6, OPUS_COLOR_DIM, "v1.8");
+        opus_page_text(me, 14, 286, 10, 6, OPUS_COLOR_DIM, "v1.9");
         footer_static(f);
-        for (int i = 0; i < 4; ++i) {
-            int on = i == sc;
-            opus_page_dot(66 + i * 8, 8, 2, on, on ? C_GOLD_L : C_GOLD_D);
-        }
         if (f == F_NICHE) {
             polyline_c(ARCH_OUT, 50, C_GOLD);
             polyline_c(ARCH_IN, 50, C_GOLD_D);
@@ -995,6 +994,10 @@ static void page_t1(void)
             static_macro();
         }
         opus_page_still_done(me);
+    }
+    for (int i = 0; i < 4; ++i) {
+        int on = i == sc;
+        opus_page_dot(66 + i * 8, 8, 2, on, on ? C_GOLD_L : C_GOLD_D);
     }
 
     if (f == F_NICHE) {
@@ -1058,6 +1061,7 @@ static void save_data(void)
     d.magic = MAGIC;
     d.version = DATA_VERSION;
     d.face = (short)face;
+    d.scene = (short)g_scene;
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i)
             d.v[f * 4 + i] = (short)k99(fv[f][i]);
@@ -1067,26 +1071,28 @@ static void save_data(void)
 static void set_face(int f)
 {
     if (f == face) return;
+    lock_blocks = 12;                       /* cover the whole transition */
     face = (f + F_N) % F_N;
     for (int i = 0; i < 4; ++i) fvl[face][i] = fv[face][i];
+    for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     save_data();
     lock_blocks = 6;
-    for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     set_msg(FACE_NAME[face]);
 }
 
 static void load_scene(int n)
 {
     n &= (SCENE_N - 1);
+    lock_blocks = 12;
     g_scene = n;
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i)
             fv[f][i] = (short)(cl99(SCENES[n][f * 4 + i]) * 32767 / 99);
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
-    lock_blocks = 6;
     for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     save_data();
+    lock_blocks = 6;
     set_msg(SCENE_NAME[n]);
 }
 
@@ -1158,8 +1164,8 @@ static const struct opus_engine SAMA = {
 
 static void e_on_block(void)
 {
-    if (!g_load_pending) return;
-    g_load_pending = 0;
+    if (g_load_state != LOAD_PENDING) return;
+    g_load_state = LOAD_IDLE;
     struct sama_data d;
     { unsigned char *z = (unsigned char *)&d; for (unsigned i = 0; i < sizeof d; ++i) z[i] = 0; }
     int n = opus_engine_data(&d, sizeof d);
@@ -1167,6 +1173,8 @@ static void e_on_block(void)
     if (n == (int)sizeof d && d.magic == MAGIC && d.version == DATA_VERSION &&
         d.face >= 0 && d.face < F_N) {
         face = d.face;
+        g_scene = d.scene;
+        if (g_scene < 0) g_scene = 0; else if (g_scene >= SCENE_N) g_scene = SCENE_N - 1;
         for (int f = 0; f < F_N; ++f)
             for (int i = 0; i < 4; ++i)
                 fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
@@ -1179,6 +1187,7 @@ static void e_on_block(void)
                 fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
         /* v1 sounds had no tune face: neutral there, not the fresh defaults */
         fv[F_TUNE][0] = 16548; fv[F_TUNE][1] = 0; fv[F_TUNE][2] = 0; fv[F_TUNE][3] = 32767;
+        g_scene = 1;
         ok = 1;
     }
     if (!ok) {
@@ -1189,6 +1198,7 @@ static void e_on_block(void)
         g_master = 65536;
         g_air_state = 0;
         hlp = 0;
+        g_scene = 1;
     }
     /* The DSP and page read the live shadow; without this every saved sound
      * played its non-active faces from the factory defaults (1.1.4 break). */
