@@ -87,7 +87,7 @@ what the four knobs mean right now. The knobs are the OP-1's own T1 knobs, so th
 - **FN + T1** loads the next scene; **shift + T1** freezes the room (the keys are muted while
   it is held; press again to release).
 
-**The six faces, in plain words**
+**The seven faces, in plain words**
 
 | face | what it is for | the four knobs |
 |---|---|---|
@@ -117,7 +117,7 @@ they mean. **T3** pages to the previous face; **T4** stays the system's LFO page
 jump to niche / space / cross / core. **FN + T1** loads the next scene; **shift + T1** freezes the room; plain **T1** is the
 OS page key.
 
-Each face keeps its own four values, and all twenty-four values (six faces) travel with the
+Each face keeps its own four values, and all twenty-four values (seven faces) travel with the
 sound in the engine's own data block, so a saved sound restores the whole instrument.
 
 | knob | niche | space | cross | mod | core | macro |
@@ -141,7 +141,7 @@ The blue push on sama's row in the mods list opens its settings page.
 
 ### Scenes
 
-A scene is a **complete pose of the instrument**: all twenty-four values (six faces × four
+A scene is a **complete pose of the instrument**: all twenty-four values (seven faces × four
 knobs). It is not an OP-1 preset; it is a starting point you can edit. **FN + T1** loads the
 next scene and shows its name.
 
@@ -265,7 +265,7 @@ keys → pitch → six voices @ 88.2 kHz, 128 samples
   50–100 % key tracking on the root.
 - **Saturation.** A 129-point `u − u³/3` table with a variable knee; unity small-signal gain, so
   drive colours the loop without changing its gain.
-- **Persistence.** `{magic, version, face, 24 values}` travels in `opus_engine_data`; saved and
+- **Persistence.** `{magic, version, face, 28 values}` travels in `opus_engine_data`; saved and
   restored with the sound.
 
 ## What is deliberately not here

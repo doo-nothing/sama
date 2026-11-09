@@ -59,6 +59,7 @@ static int g_shlast = 65535;
 static volatile int lock_blocks;
 
 static volatile int face = F_NICHE;
+static short fvl[F_N][4];          /* live (LFO) values; fv is stored */
 static short fv[F_N][4] = {
     { 14894, 23168, 30450, 16548 },   /* niche: fold 45, time 70, decay 92, filter 50 */
     { 11584,  8274,  4966, 23168 },   /* space: tone 35, warp 25, drift 15, blend 70 */
@@ -209,6 +210,14 @@ static void v_init(void *v, int index)
         g_load_pending = 1;
         face = F_NICHE;
         g_active = 0;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i)
+                fv[f][i] = (short)(SCENES[1][f * 4 + i] * 32767 / 99);
+        g_master = 65536;
+        g_air_state = 0;
+        hlp = 0;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
         g_gate = 32767;
         g_gate_next = 32767;
         g_drift = 0;
@@ -288,8 +297,8 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
         int st = tri16((int)(s->sub >> 16));
 
         if (growl) {
-            int md = ((nstep >> 12) * st) >> 4;
-            nstep += (md * growl) >> 8;
+            long long md = ((long long)(nstep >> 12) * st) >> 4;
+            nstep += (int)((md * growl) >> 8);
             if (nstep < 1) nstep = 1;
         }
 
@@ -372,39 +381,41 @@ static void b_block(short *buf)
     short par[8];
     if (!opus_engine_knobs(par)) return;
     if (lock_blocks) --lock_blocks;
+    else if (g_active) for (int i = 0; i < 4; ++i) fvl[face][i] = par[i];
+    else for (int i = 0; i < 4; ++i) { fv[face][i] = par[i]; fvl[face][i] = par[i]; }
 
     if (!line) return;
 
     g_seed = g_seed * 1103515245u + 12345u;
 
-    int fold = k99(fv[F_NICHE][0]);
-    int time = k99(fv[F_NICHE][1]);
-    int decay = k99(fv[F_NICHE][2]);
-    int filter = k99(fv[F_NICHE][3]);
-    int tone = k99(fv[F_SPACE][0]);
-    int warp = k99(fv[F_SPACE][1]);
-    int drift = k99(fv[F_SPACE][2]);
-    int blend = fv[F_SPACE][3] < 0 ? 0 : fv[F_SPACE][3];
-    int cross = k99(fv[F_CROSS][0]);
-    int polar = k99(fv[F_CROSS][1]);
-    int drive = k99(fv[F_CROSS][2]);
-    int res = k99(fv[F_CROSS][3]);
-    int rate = k99(fv[F_MOD][0]);
-    int shape = k99(fv[F_MOD][1]);
-    int depth = k99(fv[F_MOD][2]);
-    int dest = k99(fv[F_MOD][3]);
-    int core = k99(fv[F_CORE][0]);
-    int bias = k99(fv[F_CORE][1]);
-    int growl = k99(fv[F_CORE][2]);
-    int fuzz = k99(fv[F_CORE][3]);
-    int body = k99(fv[F_MACRO][0]) - 50;
-    int pressure = k99(fv[F_MACRO][1]) - 50;
-    int motion = k99(fv[F_MACRO][2]) - 50;
-    int space = k99(fv[F_MACRO][3]) - 50;
-    int tune = k99(fv[F_TUNE][0]);
-    int spread = k99(fv[F_TUNE][1]);
-    int harm = k99(fv[F_TUNE][2]);
-    int air = k99(fv[F_TUNE][3]);
+    int fold = k99(fvl[F_NICHE][0]);
+    int time = k99(fvl[F_NICHE][1]);
+    int decay = k99(fvl[F_NICHE][2]);
+    int filter = k99(fvl[F_NICHE][3]);
+    int tone = k99(fvl[F_SPACE][0]);
+    int warp = k99(fvl[F_SPACE][1]);
+    int drift = k99(fvl[F_SPACE][2]);
+    int blend = fvl[F_SPACE][3] < 0 ? 0 : fvl[F_SPACE][3];
+    int cross = k99(fvl[F_CROSS][0]);
+    int polar = k99(fvl[F_CROSS][1]);
+    int drive = k99(fvl[F_CROSS][2]);
+    int res = k99(fvl[F_CROSS][3]);
+    int rate = k99(fvl[F_MOD][0]);
+    int shape = k99(fvl[F_MOD][1]);
+    int depth = k99(fvl[F_MOD][2]);
+    int dest = k99(fvl[F_MOD][3]);
+    int core = k99(fvl[F_CORE][0]);
+    int bias = k99(fvl[F_CORE][1]);
+    int growl = k99(fvl[F_CORE][2]);
+    int fuzz = k99(fvl[F_CORE][3]);
+    int body = k99(fvl[F_MACRO][0]) - 50;
+    int pressure = k99(fvl[F_MACRO][1]) - 50;
+    int motion = k99(fvl[F_MACRO][2]) - 50;
+    int space = k99(fvl[F_MACRO][3]) - 50;
+    int tune = k99(fvl[F_TUNE][0]);
+    int spread = k99(fvl[F_TUNE][1]);
+    int harm = k99(fvl[F_TUNE][2]);
+    int air = k99(fvl[F_TUNE][3]);
 
     /* the performance macros are offsets on the deep values, neutral at 50 */
     filter = cl99(filter + (body * 6) / 10);
@@ -547,7 +558,7 @@ static void b_block(short *buf)
     int wc = (WLP[time] * (50 + tone)) / 100;
     if (wc > 32767) wc = 32767;
     if (g_tune) { twc = TONETAB[tone]; wc = 32000; }
-    if (g_freeze) { twc = 0; wc = 32000; }
+    if (g_freeze) { twc = 0; wc = 32000; hlp = 0; e1 = 0; e2 = 0; }
 
     int dec = 15000 + decay * 190;              /* 0.458 .. 1.002 */
     int knee = 27000 - drive * 190;
@@ -674,10 +685,12 @@ static void b_block(short *buf)
                 if (hg > 6000) hg = 6000;
                 o += ((h2 * hg) >> 15) + ((h3 * hg) >> 16);
             }
-            if (R_air < 96) {
-                int w = 200 + R_air * 340;
+            if (R_air < 99) {
+                int w = 920 + R_air * 318;
                 g_air_state += ((o - g_air_state) * w) >> 15;
                 o = g_air_state;
+            } else {
+                g_air_state = o;
             }
             buf[n] = (short)softx(o, 4096, 32767, 0);
         }
@@ -780,14 +793,15 @@ static void draw_niche(int decay, int filt)
 static void draw_cross(int cross, int polar, int drive, int res)
 {
     int r = 34 + cross * 12 / 99 + g_drift * 4 / 32768;
-    ring_at(RING48, 48, 160, 62, r, C_GOLD);
-    ring_at(RING48, 48, 160, 62, r - 6, C_GOLD_D);
+    if (r > 40) r = 40;
+    opus_page_dot(160, 62, r, 0, C_GOLD);
+    opus_page_dot(160, 62, r - 6, 0, C_GOLD_D);
     int q = 1 + res * 6 / 99;
     for (int i = 1; i <= q; ++i)
-        ring_at(RING48, 48, 160, 62, r - 8 - i * 2, C_GOLD_D);
+        opus_page_dot(160, 62, r - 8 - i * 2, 0, C_GOLD_D);
     if (drive > 4) {
-        ring_at(RING48, 48, 160, 62, r - 2, C_GOLD_L);
-        if (drive > 50) ring_at(RING48, 48, 160, 62, r - 4, C_GOLD_L);
+        opus_page_dot(160, 62, r - 2, 0, C_GOLD_L);
+        if (drive > 50) opus_page_dot(160, 62, r - 4, 0, C_GOLD_L);
     }
     opus_page_dot(160, 62, 2, 1, C_IVORY);
     {
@@ -862,13 +876,13 @@ static void draw_tune(int tune, int spread, int harm, int air)
         int h = (i % 5 == 0) ? 8 : 4;
         ln_c(x, cy - h, x, cy + h, 256, (i == 10) ? C_GOLD_L : C_GOLD_D);
     }
-    int nx = 60 + (tune * 200) / 99 + g_drift * 4 / 32768;
+    int nx = 160 + ((tune - 50) * 200) / 99 + g_drift * 4 / 32768;
     ln_c(nx, cy - 30, nx, cy + 30, 512, C_GOLD);
     opus_page_dot(nx, cy, 3, 1, C_IVORY);
     for (int i = 0; i < 6; ++i)
-        opus_page_dot(160 + (i - 2) * (5 + spread * 2 / 99), 100, 2, 1, i < 3 ? C_TURQ : C_GOLD_D);
-    ln_c(60, 120, 60 + 10 + harm * 30 / 99, 120, 512, C_TURQ);
-    ln_c(60, 128, 60 + 8 + harm * 18 / 99, 128, 512, C_GOLD_D);
+        opus_page_dot(160 + ((i * 2 - 5) * (spread * 12 / 99)) / 2, 100, 2, 1, i < 3 ? C_TURQ : C_GOLD_D);
+    ln_c(60, 120, 60 + harm * 30 / 99, 120, 512, C_TURQ);
+    ln_c(60, 128, 60 + harm * 18 / 99, 128, 512, C_GOLD_D);
     ln_c(200, 128, 200 + air * 80 / 99, 120, 256, C_TURQ);
 }
 
@@ -881,14 +895,11 @@ static void draw_macro(const int v[4])
         ln_c(cx - 5, 70, cx + 5, 70, 256, C_GOLD_D);
         ln_c(cx, 70, cx, 70 - len, 256, C_GOLD);
         opus_page_dot(cx, 70 - len, 2, 1, C_GOLD_L);
-        opus_page_text(me, 16 + i, cx - 10, 112, 6, OPUS_COLOR_DIM, LAB[F_MACRO][i]);
     }
 }
 
 static void static_cross(void)
 {
-    ring_at(RING48, 48, 160, 62, 46, C_GOLD);
-    ring_at(RING48, 48, 160, 62, 39, C_GOLD_D);
     ring_at(RING48, 48, 160, 62, 52, C_DIM);
     ln_c(140, 112, 180, 112, 256, C_GOLD_D);
 }
@@ -904,7 +915,6 @@ static void static_mod(void)
         int y1 = 28 + 40 + (a > 90 ? (a - 90) / 3 : (90 - a) / 3);
         ln_c(x0, y0, x1, y1, 256, (i % 3 == 0) ? C_GOLD : C_GOLD_D);
     }
-    for (int i = 0; i < 4; ++i) opus_page_dot(104 + i * 36, 104, 3, 0, C_GOLD_D);
 }
 
 static void static_core(void)
@@ -918,9 +928,9 @@ static void static_macro(void)
 {
     ln_c(34, 28, 286, 28, 256, C_GOLD);
     for (int i = 0; i < 4; ++i) {
-        int cx = 70 + i * 60;
-        ln_c(cx, 28, cx, 66, 256, C_GOLD_D);
-        opus_page_dot(cx, 66, 2, 0, C_GOLD_D);
+        int cx = 60 + i * 68;
+        ln_c(cx, 28, cx, 70, 256, C_GOLD_D);
+        opus_page_dot(cx, 70, 2, 0, C_GOLD_D);
     }
     ln_c(30, 114, 290, 114, 256, C_GOLD_D);
 }
@@ -936,27 +946,28 @@ static void static_tune(void)
     ln_c(200, 128, 200, 120, 256, C_TURQ);
 }
 
-static unsigned pg_still_key(void)
+static unsigned pg_still_key(int f, int sc, int fr)
 {
-    return (unsigned)face ^ (g_freeze ? 0x100u : 0) ^ ((unsigned)g_scene << 9);
+    return (unsigned)f ^ (fr ? 0x100u : 0) ^ ((unsigned)sc << 9);
 }
 
 static void page_t1(void)
 {
     int f = face;
+    int sc = g_scene, fr = g_freeze;
     ++g_n;
     int v[4];
     for (int i = 0; i < 4; ++i) v[i] = k99(fv[f][i]);
 
-    if (!opus_page_still(me, pg_still_key())) {
+    if (!opus_page_still(me, pg_still_key(f, sc, fr))) {
         ln_c(2, 3, 317, 3, 256, C_GOLD_D);
         ring_at(STAR8, 16, 7, 9, 3, C_GOLD_D);
         ring_at(STAR8, 16, 313, 9, 3, C_GOLD_D);
         opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-        opus_page_text(me, 14, 286, 10, 6, C_GOLD_D, "v1.1");
+        opus_page_text(me, 14, 286, 10, 6, OPUS_COLOR_DIM, "v1.8");
         footer_static(f);
         for (int i = 0; i < 4; ++i) {
-            int on = i == g_scene;
+            int on = i == sc;
             opus_page_dot(66 + i * 8, 8, 2, on, on ? C_GOLD_L : C_GOLD_D);
         }
         if (f == F_NICHE) {
@@ -991,7 +1002,7 @@ static void page_t1(void)
         if (g_tune && g_tuned_k) {
             char tb[8];
             fw_snprintf(tb, sizeof tb, "1/%d", g_tuned_k);
-            opus_page_text(me, 21, 224, 22, 7, C_GOLD_L, tb);
+            opus_page_text(me, 21, 208, 22, 7, OPUS_COLOR_TEXT, tb);
         }
     } else if (f == F_SPACE) {
         for (int i = 0; i < 4; ++i) {
@@ -1016,16 +1027,16 @@ static void page_t1(void)
     }
 
     for (int i = 0; i < g_active && i < 6; ++i)
-        opus_page_fill(306, 22 + i * 5, 310, 25 + i * 5, C_IVORY);
+        opus_page_fill(306, 22 + i * 5, 310, 25 + i * 5, OPUS_COLOR_TEXT);
     if (g_strike > 6000) ln_c(2, 3, 317, 3, 512, C_GOLD_L);
     {
-        int fx = 6 + R_filter * 300 / 99;
-        ln_c(6, 112, 313, 112, 256, C_DIM);
-        ln_c(6, 112, fx, 112, 384, C_GOLD_D);
+        int fx = 6 + R_filter * 307 / 99;
+        ln_c(6, 124, 313, 124, 256, C_DIM);
+        ln_c(6, 124, fx, 124, 384, C_GOLD_D);
     }
     footer_live(f, v);
     if (g_msg_timer) {
-        opus_page_text(me, 20, 100, 20, 7, C_GOLD_L, g_msg);
+        opus_page_text(me, 20, 100, 20, 7, OPUS_COLOR_TEXT, g_msg);
         --g_msg_timer;
     }
 }
@@ -1043,6 +1054,7 @@ static void set_msg(const char *s)
 static void save_data(void)
 {
     struct sama_data d;
+    { unsigned char *z = (unsigned char *)&d; for (unsigned i = 0; i < sizeof d; ++i) z[i] = 0; }
     d.magic = MAGIC;
     d.version = DATA_VERSION;
     d.face = (short)face;
@@ -1056,6 +1068,7 @@ static void set_face(int f)
 {
     if (f == face) return;
     face = (f + F_N) % F_N;
+    for (int i = 0; i < 4; ++i) fvl[face][i] = fv[face][i];
     save_data();
     lock_blocks = 6;
     for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
@@ -1069,6 +1082,8 @@ static void load_scene(int n)
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i)
             fv[f][i] = (short)(cl99(SCENES[n][f * 4 + i]) * 32767 / 99);
+    for (int f = 0; f < F_N; ++f)
+        for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
     lock_blocks = 6;
     for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     save_data();
@@ -1112,7 +1127,7 @@ static int e_turn(int encoder, int detents, int page)
     if (page == 0 && encoder >= 0 && encoder < 4 && detents) {
         int v = k99(fv[face][encoder]) + detents;
         if (v < 0) v = 0; else if (v > 99) v = 99;
-        fv[face][encoder] = (short)(v * 32767 / 99);
+        fv[face][encoder] = fvl[face][encoder] = (short)(v * 32767 / 99);
     }
     return 0;                                  /* the OS still owns the knob */
 }
@@ -1146,6 +1161,7 @@ static void e_on_block(void)
     if (!g_load_pending) return;
     g_load_pending = 0;
     struct sama_data d;
+    { unsigned char *z = (unsigned char *)&d; for (unsigned i = 0; i < sizeof d; ++i) z[i] = 0; }
     int n = opus_engine_data(&d, sizeof d);
     int ok = 0;
     if (n == (int)sizeof d && d.magic == MAGIC && d.version == DATA_VERSION &&
@@ -1165,7 +1181,20 @@ static void e_on_block(void)
         fv[F_TUNE][0] = 16548; fv[F_TUNE][1] = 0; fv[F_TUNE][2] = 0; fv[F_TUNE][3] = 32767;
         ok = 1;
     }
-    if (!ok) face = F_NICHE;
+    if (!ok) {
+        face = F_NICHE;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i)
+                fv[f][i] = (short)(SCENES[1][f * 4 + i] * 32767 / 99);
+        g_master = 65536;
+        g_air_state = 0;
+        hlp = 0;
+    }
+    /* The DSP and page read the live shadow; without this every saved sound
+     * played its non-active faces from the factory defaults (1.1.4 break). */
+    for (int f = 0; f < F_N; ++f)
+        for (int i = 0; i < 4; ++i)
+            fvl[f][i] = fv[f][i];
 }
 
 int opl_init(struct opl_self *self)

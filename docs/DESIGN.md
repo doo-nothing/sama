@@ -101,8 +101,8 @@ destinations are block-rate by design.
   next; the current values can be saved as a normal sound.
 - **Freeze.** `shift + T1` mutes the input, opens the tone/write filters, sets the loop gain just
   below unity and lets the room drone; the four voices are no longer heard, the room is.
-- **Persistence.** The engine stores `{magic, version, face, 24 values}` in `opus_engine_data` with
-  the sound. On load it restores all six faces; the OS's four knobs for the saved face are merged
+- **Persistence.** The engine stores `{magic, version, face, 28 values}` in `opus_engine_data` with
+  the sound. On load it restores all seven faces; the OS's four knobs for the saved face are merged
   over the data so the current face is never stale.
 
 ## Why faces
@@ -113,7 +113,7 @@ pages gives you controls that cannot be turned.
 
 sama therefore leaves **T2 and T4 to the system** (envelope, LFO) and puts everything on T1: the
 four encoders are the OS's own, so they always work, and a **face** decides what they mean. T3 pages
-through six faces while the screen stays on T1; T4 stays the system's LFO page. The four
+through seven faces while the screen stays on T1; T4 stays the system's LFO page. The four
 encoder pushes jump directly to niche / space / cross / core. Each face keeps its own four values, and the whole set travels with
 the sound.
 
@@ -121,7 +121,7 @@ the sound.
 
 - 6 voices × 128 samples at 88.2 kHz, one room pass of 64 samples at 44.1 kHz.
 - delay memory 131,072 bytes; diffuser 446 bytes; voice state 20 bytes (core budget 32).
-- The engine's data block is 60 bytes (magic, version, face, 24 values).
+- The engine's data block is 60 bytes (magic, version, face, 28 values).
 - Claimed CPU ceiling 320,000 cycles a block (conservative; device measurement pending — the
   original 0.7.1 claim was 200,000).
 - Five settings: scale, tune, wow, keytrack, diffuse; plus the engine's own data.

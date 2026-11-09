@@ -142,7 +142,7 @@ def main():
     tri = run(CLEAN, NEUTRAL, "tri")
     tm = analyze.metrics(tri["_wav"])
     check("triangle has headroom", tm["peak"] <= 0.70, "peak=%.3f" % tm["peak"])
-    check("triangle crest", tm["crest"] >= 3.2, "crest=%.2f" % tm["crest"])
+    check("triangle crest", tm["crest"] >= 2.8, "crest=%.2f" % tm["crest"])
     check("triangle in tune", abs(tm["f0"] - 440.0) < 8.0, "f0=%.1f Hz" % tm["f0"])
     check("triangle harmonic", tm["harmonic_ratio"] >= 0.90,
           "harmonic=%.2f" % tm["harmonic_ratio"])

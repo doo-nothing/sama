@@ -9,6 +9,45 @@
 - the regression oracle now measures the **spectral peak** near the played note instead of
   autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
 
+## 1.1.5
+
+- **fixed: saved sounds played the factory defaults on every non-active face.** `e_on_block`
+  loaded the saved 28 values into the stored `fv` but never synced the live shadow `fvl`, which
+  the DSP and page read. Every loaded sound therefore used defaults for space/cross/mod/core/
+  macro/tune. The load now syncs both.
+- regression: the host applies the face args after `init`, seeds the live shadow for all faces,
+  and the triangle-crest threshold is 2.8 (shape check, no audio change).
+
+## 1.1.4
+
+- **fixed: growl 64-bit overflow** (the 1.0.4 fix had been lost) — UBSan aborted at chord 44.
+- **fixed: new sounds inherited the previous sound's 28 face values**; `v_init`/empty data now
+  reset to the factory defaults and clear `g_master`/`g_air_state`/the tone highpass.
+- **fixed: freeze left a DC offset** (the frozen tone-highpass state is zeroed).
+- **fixed: air bypass** — 200 Hz–~32k mapping, state primed on bypass, 99 bypass.
+- **fixed: data padding** — the 68-byte struct is zeroed before save/load.
+- **fixed: live/stored knobs separated** — `fv` stored, `fvl` live; `b_block` writes the live
+  while voices play, the stored when none; `e_turn` updates the stored base; save/face/scene/
+  new-sound sync both; DSP reads live, page reads stored. The T4 LFO no longer bakes into
+  saved faces.
+- **page:** palette-id text/fills (version/`1/k`/message/lamps), v1.8, cross rings as dots,
+  macro stems aligned, duplicate labels/static mod dots removed, horizon moved, still key
+  captured from locals.
+
+## 1.1.3
+
+- e_turn reverted to a no-op; the per-block knob copy is the single control path (the robust
+  0.6.0 mechanism).
+
+## 1.1.2
+
+- restored the per-block `fv[face] = par` knob copy (1.1.0/1.1.1 shipped dead knobs).
+- page/art/scene/tune/filter work; seven faces; black frame/still/chassis.
+
+## 1.1.1
+
+- live motion, static faces for all seven, spectral-peak oracle.
+
 ## 1.1.0
 
 - **seventh face `tune`**: master tune (±100 cents), per-voice spread, post-room 2f/3f

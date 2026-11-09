@@ -140,6 +140,8 @@ int main(int argc, char **argv)
     memset(&self, 0, sizeof self);
     opl_init(&self);
 
+    for (int v = 0; v < 6; ++v) ENG->init(VO[v], v);
+
     int a[20];
     for (int i = 0; i < 20; ++i) a[i] = 0;
     for (int i = 0; i < 20 && i + 2 < argc; ++i) a[i] = atoi(argv[i + 2]);
@@ -155,8 +157,14 @@ int main(int argc, char **argv)
             fv[F_MACRO][i] = (short)(mv[i] * 32767 / 99);
         }
     }
-
-    for (int v = 0; v < 6; ++v) ENG->init(VO[v], v);
+    for (int f = 0; f < F_N; ++f)
+        for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
+    {
+        /* init() resets to the factory defaults (new-sound fix); apply the requested
+         * face values as the OS knobs and let the block seed the live shadow. */
+        short seed[64] = { 0 };
+        ENG->block(seed);
+    }
 
     if (env_int("SAMA_KEYTEST", 0)) {
         int a = ENG->key(0x09, 1, 1);      /* T4 on T2: the system's page */
