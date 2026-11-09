@@ -118,14 +118,15 @@ int opus_art_text(struct opl_self *s, const char *n, const char *v, unsigned l)
 
 #include "../sama.c"
 
-int opus_engine_knob_set(int k, int v) { if (k >= 0 && k < 4) fv[face][k] = (short)v; return 1; }
+static short OSK[8];                    /* the OS's knob row, independent of the engine */
+static int HOST_LIVE = 1;               /* 1 while a voice sounds (OS release tail) */
+int opus_engine_knob_set(int k, int v) { if (k >= 0 && k < 4) OSK[k] = (short)v; return 1; }
 int opus_engine_live(short par[8])
 {
-    for (int i = 0; i < 4; ++i) par[i] = fv[face][i];
-    for (int i = 4; i < 8; ++i) par[i] = 0;
-    return 1;
+    for (int i = 0; i < 8; ++i) par[i] = OSK[i];
+    return HOST_LIVE;
 }
-int opus_engine_knobs(short par[8]) { return opus_engine_live(par); }
+int opus_engine_knobs(short par[8]) { for (int i = 0; i < 8; ++i) par[i] = OSK[i]; return 1; }
 
 static void put16(FILE *f, unsigned v) { fputc(v & 255, f); fputc((v >> 8) & 255, f); }
 static void put32(FILE *f, unsigned v) { put16(f, v & 0xFFFF); put16(f, v >> 16); }
@@ -141,6 +142,7 @@ int main(int argc, char **argv)
     opl_init(&self);
 
     for (int v = 0; v < 6; ++v) ENG->init(VO[v], v);
+    e_on_block();                           /* the core's sequencer load */
 
     int a[20];
     for (int i = 0; i < 20; ++i) a[i] = 0;
@@ -159,6 +161,7 @@ int main(int argc, char **argv)
     }
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
+    for (int i = 0; i < 4; ++i) OSK[i] = fv[face][i];
     {
         /* init() resets to the factory defaults (new-sound fix); apply the requested
          * face values as the OS knobs and let the block seed the live shadow. */
@@ -187,6 +190,8 @@ int main(int argc, char **argv)
         printf("st_face_face %d\nst_face_sync %d\n", face, fsync);
 
         e_turn(0, 7, 0);
+        OSK[0] = fv[F_CROSS][0];            /* the OS knob follows a user turn */
+        { short b0[64] = { 0 }; ENG->block(b0); }
         printf("st_turn_fv %d\nst_turn_fvl %d\n", k99(fv[F_CROSS][0]), k99(fvl[F_CROSS][0]));
 
         load_scene(3);
@@ -194,6 +199,18 @@ int main(int argc, char **argv)
         for (int f = 0; f < F_N; ++f)
             for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) ssync = 0;
         printf("st_scene_scene %d\nst_scene_sync %d\nst_scene_v0 %d\n", g_scene, ssync, k99(fv[F_CROSS][0]));
+
+        /* T4 LFO while the OS release tail still sounds: fv must stay stored */
+        OSK[0] = (short)(70 * 32767 / 99);
+        HOST_LIVE = 1;
+        OSK[0] = (short)(OSK[0] + 20 * 32767 / 99);
+        { short b2[64] = { 0 }; ENG->block(b2); }
+        printf("st_live_fv %d\nst_live_fvl %d\n", k99(fv[F_CROSS][0]), k99(fvl[F_CROSS][0]));
+        { short b3[64] = { 0 }; ENG->block(b3); }
+        printf("st_rel_fv %d\n", k99(fv[F_CROSS][0]));
+        HOST_LIVE = 0;
+        OSK[0] = (short)(70 * 32767 / 99);
+        { short b4[64] = { 0 }; ENG->block(b4); }
 
         save_data();
         for (int f = 0; f < F_N; ++f)
@@ -204,8 +221,17 @@ int main(int argc, char **argv)
         int rsync = 1;
         for (int f = 0; f < F_N; ++f)
             for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) rsync = 0;
-        printf("st_reload_face %d\nst_reload_scene %d\nst_reload_v0 %d\nst_reload_sync %d\n",
-               face, g_scene, k99(fv[F_CROSS][0]), rsync);
+        printf("st_reload_face %d\nst_reload_scene %d\nst_reload_v0 %d\nst_reload_sync %d\nst_reload_osk %d\n",
+               face, g_scene, k99(fv[F_CROSS][0]), rsync, k99(OSK[0]));
+        /* a turn after the last blob save must survive a sound save/reload */
+        e_turn(0, 5, 0);
+        OSK[0] = fv[F_CROSS][0];
+        face = F_NICHE; g_scene = 0;
+        v_init(VO[0], 0);
+        e_on_block();
+        { short b1[64] = { 0 }; ENG->block(b1); }
+        printf("st_turnpersist_v %d\nst_turnpersist_osk %d\n",
+               k99(fv[F_CROSS][0]), k99(OSK[0]));
 
         DATA_N = 0;
         for (int f = 0; f < F_N; ++f)
@@ -216,8 +242,8 @@ int main(int argc, char **argv)
         int nsync = 1;
         for (int f = 0; f < F_N; ++f)
             for (int i = 0; i < 4; ++i) if (fvl[f][i] != fv[f][i]) nsync = 0;
-        printf("st_new_face %d\nst_new_scene %d\nst_new_v0 %d\nst_new_sync %d\n",
-               face, g_scene, k99(fv[F_NICHE][0]), nsync);
+        printf("st_new_face %d\nst_new_scene %d\nst_new_v0 %d\nst_new_sync %d\nst_flag %d\n",
+               face, g_scene, k99(fv[F_NICHE][0]), nsync, g_transition || g_load_transition);
         return 0;
     }
 

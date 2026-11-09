@@ -231,6 +231,13 @@ def main():
           st.get("st_new_v0") == 45 and st.get("st_new_sync") == 1,
           "face=%s scene=%s v0=%s sync=%s" % (st.get("st_new_face"), st.get("st_new_scene"),
                                               st.get("st_new_v0"), st.get("st_new_sync")))
+    check("state: release tail does not bake the LFO",
+          st.get("st_live_fv") == 70 and st.get("st_live_fvl") == 90 and st.get("st_rel_fv") == 70,
+          "fv=%s fvl=%s rel_fv=%s" % (st.get("st_live_fv"), st.get("st_live_fvl"), st.get("st_rel_fv")))
+    check("state: transition flag cleared", st.get("st_flag") == 0, "flag=%s" % st.get("st_flag"))
+    check("state: a turn after the last save survives a reload",
+          st.get("st_turnpersist_v") == 75 and st.get("st_turnpersist_osk") == 75,
+          "v=%s osk=%s" % (st.get("st_turnpersist_v"), st.get("st_turnpersist_osk")))
 
     kt = run(BASE, dict(BASE_ENV, SAMA_KEYTEST="1"), "keytest")
     check("T4 on T2 passes to the OS", kt.get("keypage_t2") == 0,

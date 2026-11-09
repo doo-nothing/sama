@@ -57,11 +57,13 @@ static unsigned widx, apw;
 static int tbase, wlp, ic1, ic2, dcz, hlp, e1, e2;
 static unsigned g_bph, g_n = 0x1234u, g_seed = 22222u, g_sh, g_wowph, g_subph;
 static int g_shlast = 65535;
-static volatile int lock_blocks;
+static volatile int g_transition;      /* key face/scene transition */
+static volatile int g_load_transition; /* sound load owns this one */
+static volatile int g_load_knobs_pending; /* blob owns the OS row until a turn */
 
 static volatile int face = F_NICHE;
-static short fvl[F_N][4];          /* live (LFO) values; fv is stored */
-static short fv[F_N][4] = {
+static volatile short fvl[F_N][4];          /* live (LFO) values; fv is stored */
+static volatile short fv[F_N][4] = {
     { 14894, 23168, 30450, 16548 },   /* niche: fold 45, time 70, decay 92, filter 50 */
     { 11584,  8274,  4966, 23168 },   /* space: tone 35, warp 25, drift 15, blend 70 */
     { 11584, 13239,  8274, 14894 },   /* cross: cross 35, polar 40, drive 25, res 45 */
@@ -208,29 +210,9 @@ static void v_init(void *v, int index)
     s->seed = 0x9E3779B9u * (unsigned)(index + 1);
     s->idx = (unsigned char)index;
     if (index == 0) {
-        /* init can run in the audio interrupt; opus_engine_data is not audio-safe.
-         * e_on_block loads the sound's face data in the sequencer thread. */
+        /* init can run in the audio interrupt; the shared state is reset by
+         * e_on_block in the sequencer thread (no cross-thread torn arrays). */
         g_load_state = LOAD_PENDING;
-        face = F_NICHE;
-        g_active = 0;
-        for (int f = 0; f < F_N; ++f)
-            for (int i = 0; i < 4; ++i)
-                fv[f][i] = (short)(SCENES[1][f * 4 + i] * 32767 / 99);
-        g_master = 65536;
-        g_air_state = 0;
-        hlp = 0;
-        for (int f = 0; f < F_N; ++f)
-            for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
-        g_gate = 32767;
-        g_gate_next = 32767;
-        g_drift = 0;
-        g_strike = 0;
-        g_freeze = 0;
-        g_scene = 1;
-        g_msg_timer = 0;
-        g_min_step = 0xFFFFFFFFu;
-        g_root_step = REF_STEP;
-        g_tuned_k = 0;
     }
 }
 
@@ -381,11 +363,19 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
 
 static void b_block(short *buf)
 {
+    int f = face;
     short par[8];
     if (!opus_engine_knobs(par)) return;
-    if (lock_blocks) --lock_blocks;
-    else if (g_active) for (int i = 0; i < 4; ++i) fvl[face][i] = par[i];
-    else for (int i = 0; i < 4; ++i) { fv[face][i] = par[i]; fvl[face][i] = par[i]; }
+    short pl[8];
+    int live = opus_engine_live(pl);       /* 1 while a voice sounds, 0 stored */
+    if (!g_transition && !g_load_transition && !g_load_knobs_pending) {
+        if (live) for (int i = 0; i < 4; ++i) fvl[f][i] = par[i];
+        else for (int i = 0; i < 4; ++i) { fv[f][i] = par[i]; fvl[f][i] = par[i]; }
+        if (f != face || g_transition || g_load_transition || g_load_knobs_pending) {
+            /* a transition started after the check: undo the late copy */
+            for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
+        }
+    }
 
     if (!line) return;
 
@@ -561,7 +551,7 @@ static void b_block(short *buf)
     int wc = (WLP[time] * (50 + tone)) / 100;
     if (wc > 32767) wc = 32767;
     if (g_tune) { twc = TONETAB[tone]; wc = 32000; }
-    if (g_freeze) { twc = 0; wc = 32000; hlp = 0; e1 = 0; e2 = 0; }
+    if (g_freeze) { twc = 128; wc = 32000; hlp = 0; e1 = 0; e2 = 0; }
 
     int dec = 15000 + decay * 190;              /* 0.458 .. 1.002 */
     int knee = 27000 - drive * 190;
@@ -574,6 +564,11 @@ static void b_block(short *buf)
     unsigned subph = g_subph;
     unsigned substep = (unsigned)root;          /* f/2 at 44.1 kHz */
     int env_acc = 0;
+    int hg = 0;
+    if (R_harm) {
+        hg = (R_harm * R_harm * g_drift) / (99 * 99 * 2);
+        if (hg > 6000) hg = 6000;
+    }
 
     for (int n = 0; n < 64; ++n) {
         int src = buf[n];
@@ -588,7 +583,8 @@ static void b_block(short *buf)
             if (!g_tune && wowd) {
                 g_wowph += 48696;
                 int ws = SINTAB[(g_wowph >> 24) & 255];
-                w += ((((tbase >> 8) * ws) >> 7) * ((wowd * 32768) / 19800)) >> 15;
+                int ww = ((tbase >> 8) * ws) >> 7;
+                w += (int)((((long long)ww) * ((wowd * 32768) / 19800)) >> 15);
             }
             tnow = tbase + w;
             if (tnow < 32 * 256) tnow = 32 * 256;
@@ -666,6 +662,7 @@ static void b_block(short *buf)
             }
         }
 
+        if (y > 32767) y = 32767; else if (y < -32768) y = -32768;
         {
             int w = src + ((y * dec) >> 15);
             w = softx(w, ik, knee, 0);
@@ -678,19 +675,19 @@ static void b_block(short *buf)
         room[g_room_sel ^ 1][n] = (short)clamp16(y);
         env_acc += y < 0 ? -y : y;
 
+        if (yo > 32767) yo = 32767; else if (yo < -32768) yo = -32768;
         {
             int o = src + (((yo - src) * (g_freeze ? 32767 : R_blend)) >> 15);
-            if (R_harm) {
+            if (hg) {
                 int hp = (int)(subph >> 16);
                 int h2 = SINTAB[((hp * 4) >> 8) & 255];
                 int h3 = SINTAB[((hp * 6) >> 8) & 255];
-                int hg = (R_harm * R_harm * g_drift) / (99 * 99 * 2);
-                if (hg > 6000) hg = 6000;
                 o += ((h2 * hg) >> 15) + ((h3 * hg) >> 16);
             }
             if (R_air < 99) {
                 int w = 920 + R_air * 318;
-                g_air_state += ((o - g_air_state) * w) >> 15;
+                int d = o - g_air_state;
+                g_air_state += (int)(((long long)d * w) >> 15);
                 o = g_air_state;
             } else {
                 g_air_state = o;
@@ -884,9 +881,9 @@ static void draw_tune(int tune, int spread, int harm, int air)
     opus_page_dot(nx, cy, 3, 1, C_IVORY);
     for (int i = 0; i < 6; ++i)
         opus_page_dot(160 + ((i * 2 - 5) * (spread * 12 / 99)) / 2, 100, 2, 1, i < 3 ? C_TURQ : C_GOLD_D);
-    ln_c(60, 120, 60 + harm * 30 / 99, 120, 512, C_TURQ);
-    ln_c(60, 128, 60 + harm * 18 / 99, 128, 512, C_GOLD_D);
-    ln_c(200, 128, 200 + air * 80 / 99, 120, 256, C_TURQ);
+    ln_c(60, 116, 60 + harm * 30 / 99, 116, 512, C_TURQ);
+    ln_c(60, 120, 60 + harm * 18 / 99, 120, 512, C_GOLD_D);
+    ln_c(200, 108, 200 + air * 80 / 99, 100, 256, C_TURQ);
 }
 
 static void draw_macro(const int v[4])
@@ -967,7 +964,7 @@ static void page_t1(void)
         ring_at(STAR8, 16, 7, 9, 3, C_GOLD_D);
         ring_at(STAR8, 16, 313, 9, 3, C_GOLD_D);
         opus_page_text(me, 13, 20, 10, 7, OPUS_COLOR_DIM, FACE_NAME[f]);
-        opus_page_text(me, 14, 286, 10, 6, OPUS_COLOR_DIM, "v1.9");
+        opus_page_text(me, 14, 286, 10, 6, OPUS_COLOR_DIM, "v1.11");
         footer_static(f);
         if (f == F_NICHE) {
             polyline_c(ARCH_OUT, 50, C_GOLD);
@@ -1039,6 +1036,9 @@ static void page_t1(void)
     }
     footer_live(f, v);
     if (g_msg_timer) {
+        opus_page_fill(2, 16, 317, 30, OPUS_COLOR_BACK);
+        ln_c(2, 16, 317, 16, 256, C_DIM);
+        ln_c(2, 30, 317, 30, 256, C_DIM);
         opus_page_text(me, 20, 100, 20, 7, OPUS_COLOR_TEXT, g_msg);
         --g_msg_timer;
     }
@@ -1071,19 +1071,24 @@ static void save_data(void)
 static void set_face(int f)
 {
     if (f == face) return;
-    lock_blocks = 12;                       /* cover the whole transition */
+    for (int sp = 0; sp < 100000 && g_load_transition; ++sp) ;
+    g_load_knobs_pending = 0;
+    g_transition = 1;                       /* audio must not copy until we finish */
     face = (f + F_N) % F_N;
-    for (int i = 0; i < 4; ++i) fvl[face][i] = fv[face][i];
+    for (int f2 = 0; f2 < F_N; ++f2)
+        for (int i = 0; i < 4; ++i) fvl[f2][i] = fv[f2][i];
     for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     save_data();
-    lock_blocks = 6;
+    g_transition = 0;
     set_msg(FACE_NAME[face]);
 }
 
 static void load_scene(int n)
 {
     n &= (SCENE_N - 1);
-    lock_blocks = 12;
+    for (int sp = 0; sp < 100000 && g_load_transition; ++sp) ;
+    g_load_knobs_pending = 0;
+    g_transition = 1;
     g_scene = n;
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i)
@@ -1092,7 +1097,7 @@ static void load_scene(int n)
         for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
     for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
     save_data();
-    lock_blocks = 6;
+    g_transition = 0;
     set_msg(SCENE_NAME[n]);
 }
 
@@ -1130,10 +1135,15 @@ static int e_key(int key, int pressed, int page)
 
 static int e_turn(int encoder, int detents, int page)
 {
+    if (g_load_knobs_pending) {
+        for (int i = 0; i < 4; ++i) opus_engine_knob_set(i, fv[face][i]);
+        g_load_knobs_pending = 0;
+    }
     if (page == 0 && encoder >= 0 && encoder < 4 && detents) {
         int v = k99(fv[face][encoder]) + detents;
         if (v < 0) v = 0; else if (v > 99) v = 99;
         fv[face][encoder] = fvl[face][encoder] = (short)(v * 32767 / 99);
+        save_data();                            /* the blob must hold the turn */
     }
     return 0;                                  /* the OS still owns the knob */
 }
@@ -1162,10 +1172,25 @@ static const struct opus_engine SAMA = {
     .key = e_key,
 };
 
+static void clear_room_state(void);
+
 static void e_on_block(void)
 {
+    if (g_transition) { g_load_state = LOAD_PENDING; return; }   /* retry next block */
     if (g_load_state != LOAD_PENDING) return;
     g_load_state = LOAD_IDLE;
+    g_load_transition = 1;
+    clear_room_state();
+    g_active = 0;
+    g_gate = 32767;
+    g_gate_next = 32767;
+    g_drift = 0;
+    g_strike = 0;
+    g_freeze = 0;
+    g_msg_timer = 0;
+    g_min_step = 0xFFFFFFFFu;
+    g_root_step = REF_STEP;
+    g_tuned_k = 0;
     struct sama_data d;
     { unsigned char *z = (unsigned char *)&d; for (unsigned i = 0; i < sizeof d; ++i) z[i] = 0; }
     int n = opus_engine_data(&d, sizeof d);
@@ -1187,7 +1212,6 @@ static void e_on_block(void)
                 fv[f][i] = (short)(cl99(d.v[f * 4 + i]) * 32767 / 99);
         /* v1 sounds had no tune face: neutral there, not the fresh defaults */
         fv[F_TUNE][0] = 16548; fv[F_TUNE][1] = 0; fv[F_TUNE][2] = 0; fv[F_TUNE][3] = 32767;
-        g_scene = 1;
         ok = 1;
     }
     if (!ok) {
@@ -1205,6 +1229,26 @@ static void e_on_block(void)
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i)
             fvl[f][i] = fv[f][i];
+    g_load_transition = 0;
+    g_load_knobs_pending = 1;
+}
+
+static void clear_room_state(void)
+{
+    if (line) for (unsigned i = 0; i < DMASK; ++i) line[i] = 0;
+    for (int i = 0; i < 2; ++i)
+        for (int j = 0; j < 64; ++j) room[i][j] = 0;
+    for (int i = 0; i < APLEN; ++i) ap[i] = 0;
+    widx = 0;
+    apw = 0;
+    tbase = TIMETAB[55];
+    wlp = 0;
+    ic1 = ic2 = dcz = hlp = e1 = e2 = 0;
+    g_subph = 0;
+    g_wowph = 0;
+    g_bph = 0;
+    g_air_state = 0;
+    g_master = 65536;
 }
 
 int opl_init(struct opl_self *self)
@@ -1212,11 +1256,7 @@ int opl_init(struct opl_self *self)
     me = self;
     line = opus_alloc_audio(self, DMASK * sizeof(short));
     if (!line) opus_log(self, "sama: no delay memory, dry");
-    widx = 0;
-    apw = 0;
-    tbase = TIMETAB[55];
-    wlp = 0;
-    ic1 = ic2 = dcz = hlp = e1 = e2 = 0;
+    clear_room_state();
     g_scale = opus_setting(self, "scale"); if (g_scale < 0 || g_scale > 3) g_scale = 0;
     g_tune = opus_setting(self, "tune") ? 1 : 0;
     g_wow = cl99(opus_setting(self, "wow"));

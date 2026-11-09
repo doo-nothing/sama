@@ -6,7 +6,10 @@ about who owns a value. This document makes them explicit: the states, the event
 invariants, and the consequence when an invariant breaks.
 
 The implementation is still the single `sama.c`, so this is a specification plus the
-small explicit transitions added in 1.1.6. The host harness (`test/host.c`,
+small explicit transitions added in 1.1.6/1.1.7. `face`, `fv` and `fvl` are `volatile`:
+they are written by the key thread and read by the audio block, and the critical
+section is a flag rather than a block countdown, so a slow key thread cannot let the
+audio copy mid-transition. The host harness (`test/host.c`,
 `SAMA_STATE=1`) runs the same transitions the device runs and the regression asserts
 the invariants below.
 
@@ -19,7 +22,7 @@ the invariants below.
 | owns | the saved 68 bytes and the first copy into both face arrays |
 | invariant | after `e_on_block`: `face` in range, `g_scene` in range, `fvl[f][i] == fv[f][i]` for all 28 |
 | failure | 1.1.4 loaded `fv` but not `fvl`; every saved sound played factory defaults on its non-active faces |
-| transition | `v_init` → `LOAD_PENDING`; `e_on_block` consumes it exactly once, then syncs both arrays |
+| transition | `v_init` → `LOAD_PENDING`; `e_on_block` consumes it exactly once behind `g_transition`, syncs both arrays, then clears the flag |
 
 Empty/invalid data is its own terminal state: `face = niche`, `g_scene = 1`, the factory
 choir table into `fv`, and the same table into `fvl`.
@@ -41,11 +44,11 @@ sounds still load and old readers simply see scene 0. No version bump, no broken
 
 | | |
 |---|---|
-| state | `face` (0..6), `lock_blocks` |
+| state | `face` (0..6), `g_transition` |
 | events | T3, the four pushes, `load_scene`, `set_face` |
-| invariant | lock set **before** any mutation; `fv`/`fvl` of the new face agree; the OS knobs are written to the new face; save happens after those writes |
+| invariant | `g_transition` set **before** any mutation and cleared only after the save; the audio block never copies knobs while it is set; `fv`/`fvl` of the new face agree; the OS knobs are written to the new face |
 | failure | the old `set_face` set `lock_blocks` after `face`/`save_data`, so an audio block during the save could copy the old OS knobs into the new face |
-| transition | `lock=12` → `face` → `fvl sync` → `knob_set` → `save` → `lock=6` |
+| transition | `g_transition=1` → `face` → `fvl sync` → `knob_set` → `save` → `g_transition=0` |
 
 ## 4. Knobs (stored / live / OS)
 
@@ -55,7 +58,7 @@ This is the machine that produced the dead-knob 1.1.0 and the baked-LFO 1.1.2.
 |---|---|
 | state | `fv` (stored user value), `fvl` (live, LFO included), the OS's four knobs |
 | events | `e_turn` (user), `b_block` (each audio block), note on/off |
-| invariant | `fv` is only written by a user turn or when no voice is active; `fvl` may be written by the LFO; `save_data`/`set_face`/`load_scene` read `fv`; the DSP and page read `fvl` |
+| invariant | `fv` is only written by a user turn or when no voice is active; `fvl` may be written by the LFO; `save_data`/`set_face`/`load_scene` read `fv`; the DSP reads `fvl`; the page reads `fv` (the value the player set) |
 | failure | 1.1.0 wrote neither (dead knobs); 1.1.2 wrote the LFO into `fv` (saved the wobble) |
 | transition | turn → both; voice active → `fvl` only; no voice → both (the OS's stored value) |
 
@@ -71,7 +74,7 @@ must not be the only control path, and why `e_turn` still exists.
 | events | FN+T1, `load_scene`, load, new sound |
 | invariant | every scene writes all 28 values and both arrays; the scene is saved and restored; the dots show the loaded scene |
 | failure | `g_scene` was never persisted, so the dots lied after reload and FN+T1 restarted from 1 |
-| transition | `lock=12` → `g_scene` → all `fv` → all `fvl` → `knob_set` → `save` → `lock=6` |
+| transition | `g_transition=1` → `g_scene` → all `fv` → all `fvl` → `knob_set` → `save` → `g_transition=0` |
 
 ## 6. Tune mode
 

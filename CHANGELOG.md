@@ -9,6 +9,53 @@
 - the regression oracle now measures the **spectral peak** near the played note instead of
   autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
 
+## 1.1.9
+
+- **fixed: the T4 LFO no longer bakes during the OS release tail.** `b_block` now uses
+  `opus_engine_live()`'s return (a voice is sounding) instead of the plugin's key count
+  `g_active`; after key-up the OS envelope still sounds and the knobs are still LFO-live.
+  While live: `fvl=par`, `fv` stays the stored value. Regression: `st_live_fv=70`,
+  `st_live_fvl=90`, `st_rel_fv=70`.
+- **fixed: the load guard.** After a load the blob owns the active face; `b_block` skips the
+  OS row until the first KeyHandler turn, which re-asserts the blob with
+  `opus_engine_knob_set` (KeyHandler, not sequencer) and clears the guard. No stale row can
+  clobber the loaded face, and no sequencer-thread KeyHandler call remains.
+- **fixed: scene reads `d.scene` again** (edited and v1 scenes preserved; old v2 padding is
+  clamped), instead of deriving from an exact 28-value match.
+- **fixed: `v_init` only signals the load**; `e_on_block` owns the shared reset under the
+  load flag, removing the audio-interrupt/sequencer torn-array race.
+- **fixed: `b_block` snapshots `face` before the knob read**, re-checks the flags and
+  restores the old face's stored value if a transition started after the check; `e_on_block`
+  defers while a face transition is in flight, and face/scene wait out a load.
+- page v1.11 (message banner, tune air stub); tests for the release tail, load guard, turn
+  persistence, scene, and new-sound defaults.
+
+## 1.1.8
+
+- **fixed: the load commit was wrong.** A knob turn now saves the engine blob, so the OS's
+  latest active-face turns survive a sound save/reload. The sequencer-thread
+  `opus_engine_knob_set` re-assert is gone: it is a KeyHandler-only API and it revoked the
+  OS row (turns made after the last save were lost on reload).
+- **fixed: two room signed overflows** (feedback write, dry/room blend) by clamping
+  `y`/`yo` before the multiply; the air one-pole is 64-bit. Both audit configs are UBSan-clean.
+- **fixed: new-sound/new-load DSP reset** (delay line, room, filter, modulators) in
+  `e_on_block` (sequencer thread), not the audio interrupt.
+- **scene is derived from the 28 values**, so old v2 padding bytes cannot invent a scene.
+- **page:** full-width message banner (no hole in the art), tune air stub aligned, v1.11.
+- **guarded** the voice render against a failed delay allocation.
+- **test:** turn-after-save reload; both room UBSan configs.
+
+## 1.1.7
+
+- **critical section is explicit**: `g_transition` replaces the `lock_blocks` countdown.
+  The key thread sets it before a face/scene/sound-load mutation and clears it after the
+  save; the audio block never copies knobs while it is set, so a slow key thread cannot
+  let the audio copy mid-transition. `face`, `fv` and `fvl` are `volatile` (key writes,
+  audio reads).
+- **`SAMA_STATE` asserts the flag is clear** after the transition sequence.
+- test: `pcm` freed (the CI LeakSanitizer failure); the v1.1.6 tag was moved to the
+  leak-fix commit so the tag build is green.
+
 ## 1.1.6
 
 - **state machines made explicit** (`docs/STATE.md`): sound load, data format, face,
