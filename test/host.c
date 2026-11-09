@@ -330,5 +330,6 @@ int main(int argc, char **argv)
     put16(wav, 2); put16(wav, 16); fwrite("data", 1, 4, wav); put32(wav, (unsigned)total_n * 2);
     fwrite(pcm, 2, (size_t)total_n, wav);
     fclose(wav);
+    free(pcm);
     return 0;
 }
