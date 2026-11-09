@@ -159,6 +159,17 @@ int main(int argc, char **argv)
             fv[F_MACRO][i] = (short)(mv[i] * 32767 / 99);
         }
     }
+    {
+        const char *tf = getenv("SAMA_TUNEFACE");
+        if (tf && *tf) {
+            int tv[4] = { 50, 0, 20, 90 };
+            sscanf(tf, "%d,%d,%d,%d", &tv[0], &tv[1], &tv[2], &tv[3]);
+            for (int i = 0; i < 4; ++i) {
+                if (tv[i] < 0) tv[i] = 0; else if (tv[i] > 99) tv[i] = 99;
+                fv[F_TUNE][i] = (short)(tv[i] * 32767 / 99);
+            }
+        }
+    }
     for (int f = 0; f < F_N; ++f)
         for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
     for (int i = 0; i < 4; ++i) OSK[i] = fv[face][i];

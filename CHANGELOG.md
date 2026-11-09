@@ -9,6 +9,18 @@
 - the regression oracle now measures the **spectral peak** near the played note instead of
   autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
 
+## 1.1.10
+
+- **master tune is exactly +-100 cents** (100-entry ratio table), replacing the linear
+  +-~100 map that was -103/+96.
+- **spread ranks the active voices** (2/3/5 voices now symmetric; only 6 was correct before).
+- **harm bottom is audible** (higher precision before the divide; harm=1 no longer
+  bit-identical to 0); the default harm 20 is 4x louder.
+- **air 99 bypass fades** (8-sample) instead of the 14x transient.
+- **freeze tail** has a final DC blocker with a freeze-specific cutoff; mean 0.00096 FS
+  (was 0.007). The blocker is transparent when not frozen.
+- tests: master tune +-100, harm bottom, 2-voice spread, freeze mean.
+
 ## 1.1.9
 
 - **fixed: the T4 LFO no longer bakes during the OS release tail.** `b_block` now uses

@@ -200,6 +200,9 @@ def main():
     fr = run(BASE, dict(BASE_ENV, SAMA_FREEZE_AT="2.5"), "freeze")
     check("freeze sustains", fr["rms5"] >= 2.0 * max(base["rms5"], 1.0),
           "freeze rms5=%.0f vs %.0f" % (fr["rms5"], base["rms5"]))
+    fx, fsr = analyze.load_wav(fr["_wav"])
+    fmean = float(np.mean(fx[int(2.5 * fsr):int(4.0 * fsr)]))
+    check("freeze has no DC offset", abs(fmean) < 0.001, "mean=%.5f FS" % fmean)
     check("freeze is a drone", fr["rms5"] >= 0.10 * max(fr["rms1"], 1.0),
           "rms5=%.0f rms1=%.0f" % (fr["rms5"], fr["rms1"]))
 

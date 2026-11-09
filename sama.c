@@ -90,11 +90,13 @@ static volatile int R_rate = 30, R_shape = 15, R_depth = 45, R_dest = 30;
 static volatile int R_core = 35, R_bias = 50, R_growl = 35, R_fuzz = 5;
 static volatile int R_diffuse = 30, R_wow = 18;
 static volatile int R_tune = 50, R_spread = 0, R_harm = 20, R_air = 90;
-static volatile int g_master = 65536, g_air_state = 0;
+static volatile int g_master = 65536, g_air_state = 0, g_out_dc = 0;
+static const int MASTER[100] = { 61858, 61929, 62001, 62073, 62144, 62216, 62288, 62360, 62432, 62504, 62576, 62649, 62721, 62794, 62866, 62939, 63012, 63085, 63158, 63231, 63304, 63377, 63450, 63523, 63597, 63670, 63744, 63818, 63891, 63965, 64039, 64113, 64187, 64261, 64336, 64410, 64485, 64559, 64634, 64708, 64783, 64858, 64933, 65008, 65083, 65159, 65234, 65309, 65385, 65460, 65536, 65612, 65688, 65764, 65840, 65916, 65992, 66068, 66144, 66221, 66297, 66374, 66451, 66528, 66605, 66682, 66759, 66836, 66913, 66990, 67068, 67145, 67223, 67301, 67378, 67456, 67534, 67612, 67691, 67769, 67847, 67926, 68004, 68083, 68161, 68240, 68319, 68398, 68477, 68556, 68635, 68715, 68794, 68874, 68953, 69033, 69113, 69193, 69273, 69353 };
 static volatile int R_gate = 32767;
 static const int VGAIN[7] = { 32767, 32767, 23170, 18918, 16384, 14654, 13377 };
 
 static volatile int g_breath = 16384, g_drift = 0, g_pitch_semi = 0, g_ratio = 65536, g_xmod = 0;
+static volatile unsigned g_act_mask = 0;
 static volatile int g_gate = 32767, g_gate_next = 32767;
 static volatile int g_root_step = REF_STEP;
 static volatile unsigned g_min_step = 0xFFFFFFFFu;
@@ -221,6 +223,7 @@ static void v_note_on(void *v, const short *knobs)
     struct voice *s = v;
     (void)knobs;
     if (g_active < 6) ++g_active;
+    g_act_mask |= 1u << s->idx;
     s->strike = 32767;
     s->seed = s->seed * 1664525u + 1013904223u;
     s->ph = s->seed * 0x9E3779B9u;
@@ -230,8 +233,10 @@ static void v_note_on(void *v, const short *knobs)
 
 static void v_release(void *v, const short *knobs)
 {
-    (void)v; (void)knobs;
+    struct voice *s = v;
+    (void)knobs;
     if (g_active > 0) --g_active;
+    g_act_mask &= ~(1u << s->idx);
 }
 
 static void v_render(void *v, short *out, const short *par, const unsigned *pitch)
@@ -243,7 +248,10 @@ static void v_render(void *v, short *out, const short *par, const unsigned *pitc
     int ratio = g_ratio;
     ratio = (int)(((long long)ratio * g_master) >> 16);
     if (R_spread && g_active > 1) {
-        int c = ((int)s->idx * 2 - 5) * R_spread * 2 / 99;
+        int n = g_active, rank = 0;
+        for (int j = 0; j < (int)s->idx; ++j)
+            if (g_act_mask & (1u << j)) ++rank;
+        int c = ((2 * rank - (n - 1)) * 10 * R_spread) / ((n - 1) * 99);
         ratio = (int)(((long long)ratio * (65536 + c * 38)) >> 16);
     }
     int gate0 = g_gate, gate1 = g_gate_next;
@@ -443,7 +451,7 @@ static void b_block(short *buf)
     R_core = core; R_bias = bias; R_growl = growl; R_fuzz = fuzz;
     R_diffuse = r_diffuse; R_wow = r_wow;
     R_tune = tune; R_spread = spread; R_harm = harm; R_air = air;
-    g_master = 65536 + (tune - 50) * 76;
+    g_master = MASTER[cl99(tune)];
 
     if (g_min_step != 0xFFFFFFFFu) g_root_step = (int)g_min_step;
     int root = (int)(((long long)g_root_step * g_master) >> 16);
@@ -566,7 +574,7 @@ static void b_block(short *buf)
     int env_acc = 0;
     int hg = 0;
     if (R_harm) {
-        hg = (R_harm * R_harm * g_drift) / (99 * 99 * 2);
+        hg = (int)(((long long)R_harm * R_harm * g_drift * 8) / (99 * 99 * 2));
         if (hg > 6000) hg = 6000;
     }
 
@@ -690,8 +698,11 @@ static void b_block(short *buf)
                 g_air_state += (int)(((long long)d * w) >> 15);
                 o = g_air_state;
             } else {
-                g_air_state = o;
+                g_air_state += (o - g_air_state) >> 3;
+                o = g_air_state;
             }
+            g_out_dc += (o - g_out_dc) >> (g_freeze ? 6 : 9);
+            o -= g_out_dc;
             buf[n] = (short)softx(o, 4096, 32767, 0);
         }
     }
@@ -1248,6 +1259,8 @@ static void clear_room_state(void)
     g_wowph = 0;
     g_bph = 0;
     g_air_state = 0;
+    g_out_dc = 0;
+    g_act_mask = 0;
     g_master = 65536;
 }
 
