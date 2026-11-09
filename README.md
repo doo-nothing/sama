@@ -117,7 +117,7 @@ they mean. **T3** pages to the previous face; **T4** stays the system's LFO page
 jump to niche / space / cross / core. **FN + T1** loads the next scene; **shift + T1** freezes the room; plain **T1** is the
 OS page key.
 
-Each face keeps its own four values, and all twenty-four values (seven faces) travel with the
+Each face keeps its own four values, and all twenty-eight values (seven faces) travel with the
 sound in the engine's own data block, so a saved sound restores the whole instrument.
 
 | knob | niche | space | cross | mod | core | macro |
@@ -141,7 +141,7 @@ The blue push on sama's row in the mods list opens its settings page.
 
 ### Scenes
 
-A scene is a **complete pose of the instrument**: all twenty-four values (seven faces × four
+A scene is a **complete pose of the instrument**: all twenty-eight values (seven faces × four
 knobs). It is not an OP-1 preset; it is a starting point you can edit. **FN + T1** loads the
 next scene and shows its name.
 
@@ -152,7 +152,7 @@ next scene and shows its name.
   like noise; it is meant to.
 
 A scene's values stay on the knobs. Save the sound in the OP-1's normal way and all
-twenty-four values travel with it; to keep a scene as a permanent preset, load it and save
+twenty-eight values travel with it; to keep a scene as a permanent preset, load it and save
 the sound.
 
 ## Install

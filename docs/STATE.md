@@ -22,7 +22,7 @@ the invariants below.
 | owns | the saved 68 bytes and the first copy into both face arrays |
 | invariant | after `e_on_block`: `face` in range, `g_scene` in range, `fvl[f][i] == fv[f][i]` for all 28 |
 | failure | 1.1.4 loaded `fv` but not `fvl`; every saved sound played factory defaults on its non-active faces |
-| transition | `v_init` → `LOAD_PENDING`; `e_on_block` consumes it exactly once behind `g_transition`, syncs both arrays, then clears the flag |
+| transition | `v_init` only sets `LOAD_PENDING`; `e_on_block` (sequencer) owns the shared reset behind `g_load_transition`, syncs both arrays, leaves `g_load_knobs_pending` for the first turn, then clears the load flag |
 
 Empty/invalid data is its own terminal state: `face = niche`, `g_scene = 1`, the factory
 choir table into `fv`, and the same table into `fvl`.
@@ -48,7 +48,7 @@ sounds still load and old readers simply see scene 0. No version bump, no broken
 | events | T3, the four pushes, `load_scene`, `set_face` |
 | invariant | `g_transition` set **before** any mutation and cleared only after the save; the audio block never copies knobs while it is set; `fv`/`fvl` of the new face agree; the OS knobs are written to the new face |
 | failure | the old `set_face` set `lock_blocks` after `face`/`save_data`, so an audio block during the save could copy the old OS knobs into the new face |
-| transition | `g_transition=1` → `face` → `fvl sync` → `knob_set` → `save` → `g_transition=0` |
+| transition | wait out a load; `g_transition=1` → `face` → all `fvl=fv` → `knob_set` → `save` → `g_transition=0`; `b_block` snapshots `face` before the knob read and restores if a transition starts after the check |
 
 ## 4. Knobs (stored / live / OS)
 
@@ -60,7 +60,7 @@ This is the machine that produced the dead-knob 1.1.0 and the baked-LFO 1.1.2.
 | events | `e_turn` (user), `b_block` (each audio block), note on/off |
 | invariant | `fv` is only written by a user turn or when no voice is active; `fvl` may be written by the LFO; `save_data`/`set_face`/`load_scene` read `fv`; the DSP reads `fvl`; the page reads `fv` (the value the player set) |
 | failure | 1.1.0 wrote neither (dead knobs); 1.1.2 wrote the LFO into `fv` (saved the wobble) |
-| transition | turn → both; voice active → `fvl` only; no voice → both (the OS's stored value) |
+| transition | turn → save both + commit the blob; `opus_engine_live()` says a voice sounds → `fvl` only (the OS release tail included); no voice → both (stored); after a load the blob wins until the first turn re-asserts it with `knob_set` |
 
 The 1.1.2 lesson: `opus_engine_knobs` is LFO-live while a note sounds. There is no getter
 for the unmodulated stored value, so the plugin owns `fv`. That is why the per-block copy
@@ -72,7 +72,7 @@ must not be the only control path, and why `e_turn` still exists.
 |---|---|
 | state | `g_scene` (0..3) |
 | events | FN+T1, `load_scene`, load, new sound |
-| invariant | every scene writes all 28 values and both arrays; the scene is saved and restored; the dots show the loaded scene |
+| invariant | every scene writes all 28 values and both arrays; `d.scene` is saved and read back (v2), v1 is scene 1, old v2 padding is clamped; the dots show the loaded scene |
 | failure | `g_scene` was never persisted, so the dots lied after reload and FN+T1 restarted from 1 |
 | transition | `g_transition=1` → `g_scene` → all `fv` → all `fvl` → `knob_set` → `save` → `g_transition=0` |
 
