@@ -212,9 +212,31 @@ static void v_init(void *v, int index)
     s->seed = 0x9E3779B9u * (unsigned)(index + 1);
     s->idx = (unsigned char)index;
     if (index == 0) {
-        /* init can run in the audio interrupt; the shared state is reset by
-         * e_on_block in the sequencer thread (no cross-thread torn arrays). */
+        /* Defaults here, not only in the load block: if the load block is delayed
+         * the first sound must still be the factory patch, never silence. */
         g_load_state = LOAD_PENDING;
+        face = F_NICHE;
+        g_active = 0;
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i)
+                fv[f][i] = (short)(SCENES[1][f * 4 + i] * 32767 / 99);
+        for (int f = 0; f < F_N; ++f)
+            for (int i = 0; i < 4; ++i) fvl[f][i] = fv[f][i];
+        g_master = 65536;
+        g_air_state = 0;
+        g_out_dc = 0;
+        g_act_mask = 0;
+        hlp = 0;
+        g_gate = 32767;
+        g_gate_next = 32767;
+        g_drift = 0;
+        g_strike = 0;
+        g_freeze = 0;
+        g_scene = 1;
+        g_msg_timer = 0;
+        g_min_step = 0xFFFFFFFFu;
+        g_root_step = REF_STEP;
+        g_tuned_k = 0;
     }
 }
 

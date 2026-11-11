@@ -9,6 +9,14 @@
 - the regression oracle now measures the **spectral peak** near the played note instead of
   autocorrelation f0, which locked onto the f/2 sub and hid the 62-cent bug.
 
+## 1.1.11
+
+- **restored the factory defaults in `v_init`.** 1.1.9 moved them only into the load block;
+  if that block is delayed, the first sound is all zeros (silence). `v_init` sets the
+  factory patch again; the load block still loads the saved sound over it.
+- the 1.1.9/1.1.10 load path, guard, live shadow, scene field, tune table, spread rank,
+  harm, air and freeze stay.
+
 ## 1.1.10
 
 - **master tune is exactly +-100 cents** (100-entry ratio table), replacing the linear
